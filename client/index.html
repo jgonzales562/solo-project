@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Middleware Composer</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        margin: 20px;
+      }
+      .row {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .card {
+        border: 1px solid #ddd;
+        border-radius: 12px;
+        padding: 12px;
+      }
+      .list {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+      }
+      .badge {
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: #f3f4f6;
+        font-size: 12px;
+      }
+      .timeline {
+        display: grid;
+        gap: 6px;
+      }
+      .bar {
+        height: 10px;
+        border-radius: 999px;
+        background: #e5e7eb;
+        position: relative;
+      }
+      .bar > span {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        border-radius: 999px;
+        background: #2563eb;
+      }
+      .error {
+        background: #fee2e2;
+      }
+      .short {
+        background: #fef3c7;
+      }
+      textarea {
+        width: 100%;
+        min-height: 80px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      button {
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Middleware Composer</h1>
+
+    <div class="row">
+      <div class="card" style="min-width: 360px">
+        <h3>1) Pick & order</h3>
+        <div id="mw-list" class="col"></div>
+      </div>
+
+      <div class="card" style="flex: 1">
+        <h3>2) Options for selected</h3>
+        <div id="selected" class="col"></div>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top: 12px">
+      <div class="card" style="min-width: 360px">
+        <h3>3) Mock Request</h3>
+        <label>Method <input id="method" value="GET" /></label>
+        <label>Path <input id="path" value="/test" /></label>
+        <label>Headers (JSON)</label>
+        <textarea id="headers">
+{ "x-auth": "secret", "x-user": "123" }</textarea
+        >
+        <label>Query (JSON)</label>
+        <textarea id="query">{}</textarea>
+        <label>Body (JSON)</label>
+        <textarea id="body">{}</textarea>
+        <div class="row">
+          <button id="run">Run Chain</button>
+          <button id="export">Export Code</button>
+        </div>
+      </div>
+
+      <div class="card" style="flex: 1">
+        <h3>4) Timeline & Result</h3>
+        <div id="timeline" class="timeline"></div>
+        <pre id="result"></pre>
+      </div>
+    </div>
+
+    <script src="./app.js" type="module"></script>
+  </body>
+</html>
