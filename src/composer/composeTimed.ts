@@ -59,25 +59,8 @@ export type RunResult = {
   };
 };
 
-export async function runChain({
-  chain,
-  payload,
-  perStepTimeoutMs = 2000,
-}: RunOptions): Promise<RunResult> {
-  const req: Req = {
-    method: payload?.method || 'GET',
-    path: payload?.path || '/test',
-    headers: Object.fromEntries(
-      Object.entries(payload?.headers || {}).map(([k, v]) => [
-        k.toLowerCase(),
-        String(v),
-      ])
-    ),
-    query: payload?.query || {},
-    body: payload?.body ?? null,
-  };
-
-  const res: Res = {
+function createResponse(): Res {
+  return {
     locals: {},
     statusCode: 200,
     headers: {},
@@ -106,6 +89,33 @@ export async function runChain({
       this.cookies.push({ name, value, options });
     },
   };
+}
+
+function getErrorMessage(err: any): string {
+  return typeof err === 'string' ? err : err?.message || 'Error';
+}
+
+const CHECK_INTERVAL_MS = 10;
+
+export async function runChain({
+  chain,
+  payload,
+  perStepTimeoutMs = 2000,
+}: RunOptions): Promise<RunResult> {
+  const req: Req = {
+    method: payload?.method || 'GET',
+    path: payload?.path || '/test',
+    headers: Object.fromEntries(
+      Object.entries(payload?.headers || {}).map(([k, v]) => [
+        k.toLowerCase(),
+        String(v),
+      ])
+    ),
+    query: payload?.query || {},
+    body: payload?.body ?? null,
+  };
+
+  const res = createResponse();
   const timeline: TimelineItem[] = [];
 
   for (const step of chain) {
@@ -113,6 +123,7 @@ export async function runChain({
     let ended = false;
     let status: TimelineItem['status'] = 'ok';
     let errorMsg: string | undefined;
+
     await new Promise<void>(async (resolve) => {
       let nextCalled = false;
       const timer = setTimeout(() => {
@@ -126,7 +137,7 @@ export async function runChain({
         nextCalled = true;
         if (err) {
           status = 'error';
-          errorMsg = typeof err === 'string' ? err : err?.message || 'Error';
+          errorMsg = getErrorMessage(err);
         }
         clearTimeout(timer);
         ended = true;
@@ -134,18 +145,15 @@ export async function runChain({
       };
       try {
         const maybe = step.handler(req, res, next);
-        if (maybe && typeof (maybe as any).then === 'function') {
-          // Await async middleware
-          try {
-            await (maybe as Promise<void>);
-          } catch (e: any) {
+        if (maybe instanceof Promise) {
+          await maybe.catch((e: any) => {
             status = 'error';
-            errorMsg = e?.message || String(e);
-          }
+            errorMsg = getErrorMessage(e);
+          });
         }
       } catch (e: any) {
         status = 'error';
-        errorMsg = e?.message || String(e);
+        errorMsg = getErrorMessage(e);
         clearTimeout(timer);
         ended = true;
         return resolve();
@@ -158,26 +166,27 @@ export async function runChain({
           ended = true;
           resolve();
         }
-      }, 10);
+      }, CHECK_INTERVAL_MS);
     });
     const durationMs = Math.max(0, Date.now() - startedAt);
 
-    // If response has been sent and no error, mark as short-circuit
-    if (res.responded && status === 'ok') {
-      status = 'short-circuit';
-    }
+    // Determine final status - if response was sent without error/timeout, it's a short-circuit
+    const finalStatus: TimelineItem['status'] =
+      res.responded && status === 'ok' ? 'short-circuit' : status;
 
     timeline.push({
       key: step.key,
       name: step.name,
       startedAtMs: startedAt,
       durationMs,
-      status,
+      status: finalStatus,
       error: errorMsg,
       localsPreview: shallowPreview(res.locals),
     });
-    if (status === 'error' || (res.responded && status !== 'timeout')) {
-      break; // stop after error or successful short-circuit
+
+    // Stop execution on error, timeout, or short-circuit
+    if (finalStatus !== 'ok') {
+      break;
     }
   }
 
@@ -197,7 +206,7 @@ function shallowPreview(obj: Record<string, any>) {
   const out: Record<string, any> = {};
   for (const [k, v] of Object.entries(obj)) {
     out[k] =
-      typeof v === 'object'
+      typeof v === 'object' && v !== null
         ? Array.isArray(v)
           ? `[Array(${v.length})]`
           : '{...}'

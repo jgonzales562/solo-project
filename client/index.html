@@ -1,12 +1,21 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Interactive tool for composing, testing, and visualizing Express.js middleware chains"
+    />
     <title>Middleware Composer</title>
     <style>
       body {
-        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        font-family:
+          system-ui,
+          -apple-system,
+          Segoe UI,
+          Roboto,
+          sans-serif;
         margin: 20px;
       }
       .row {
@@ -59,10 +68,31 @@
       .short {
         background: #fef3c7;
       }
+      input,
       textarea {
         width: 100%;
+        min-width: 200px;
         min-height: 80px;
+        padding: 8px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        resize: vertical;
+      }
+      input {
+        min-height: auto;
+        font-family:
+          system-ui,
+          -apple-system,
+          Segoe UI,
+          Roboto,
+          sans-serif;
+      }
+      input:focus,
+      textarea:focus {
+        outline: 2px solid #2563eb;
+        outline-offset: 0;
+        border-color: #2563eb;
       }
       pre {
         white-space: pre-wrap;
@@ -70,47 +100,124 @@
       }
       button {
         cursor: pointer;
+        padding: 6px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        background: white;
+        transition: all 0.2s;
+      }
+      button:hover {
+        background: #f3f4f6;
+        border-color: #9ca3af;
+      }
+      button:focus {
+        outline: 2px solid #2563eb;
+        outline-offset: 2px;
+      }
+      button:active {
+        background: #e5e7eb;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      button:disabled:hover {
+        background: white;
+        border-color: #d1d5db;
+      }
+      .card-narrow {
+        min-width: 360px;
+      }
+      .card-flex {
+        flex: 1;
+      }
+      .row-spaced {
+        margin-top: 12px;
+      }
+      .container {
+        max-width: 1400px;
+        margin: 0 auto;
+      }
+      .loading-msg {
+        color: #666;
+        font-style: italic;
+      }
+      .error-msg {
+        color: #dc2626;
+      }
+      .kbd {
+        display: inline-block;
+        padding: 2px 6px;
+        font-size: 11px;
+        line-height: 1;
+        color: #666;
+        background: #f3f4f6;
+        border: 1px solid #d1d5db;
+        border-radius: 3px;
+        margin-left: 8px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .row-between {
+        justify-content: space-between;
+      }
+      .json-valid {
+        border-color: #10b981 !important;
+      }
+      .json-invalid {
+        border-color: #dc2626 !important;
       }
     </style>
   </head>
   <body>
-    <h1>Middleware Composer</h1>
+    <div class="container">
+      <h1>Middleware Composer</h1>
 
-    <div class="row">
-      <div class="card" style="min-width: 360px">
-        <h3>1) Pick & order</h3>
-        <div id="mw-list" class="col"></div>
-      </div>
+      <div class="row">
+        <div class="card card-narrow">
+          <h3>1) Pick & order</h3>
+          <div id="mw-list" class="col" role="list"></div>
+        </div>
 
-      <div class="card" style="flex: 1">
-        <h3>2) Options for selected</h3>
-        <div id="selected" class="col"></div>
-      </div>
-    </div>
-
-    <div class="row" style="margin-top: 12px">
-      <div class="card" style="min-width: 360px">
-        <h3>3) Mock Request</h3>
-        <label>Method <input id="method" value="GET" /></label>
-        <label>Path <input id="path" value="/test" /></label>
-        <label>Headers (JSON)</label>
-        <textarea id="headers">
-{ "x-auth": "secret", "x-user": "123" }</textarea
-        >
-        <label>Query (JSON)</label>
-        <textarea id="query">{}</textarea>
-        <label>Body (JSON)</label>
-        <textarea id="body">{}</textarea>
-        <div class="row">
-          <button id="run">Run Chain</button>
-          <button id="export">Export Code</button>
+        <div class="card card-flex">
+          <h3>2) Options for selected</h3>
+          <div id="selected" class="col" role="list"></div>
         </div>
       </div>
 
-      <div class="card" style="flex: 1">
-        <h3>4) Timeline & Result</h3>
-        <div id="timeline" class="timeline"></div>
-        <pre id="result"></pre>
+      <div class="row row-spaced">
+        <div class="card card-narrow">
+          <h3>3) Mock Request</h3>
+          <label for="method">Method <input id="method" value="GET" /></label>
+          <label for="path">Path <input id="path" value="/test" /></label>
+          <label for="headers">Headers (JSON)</label>
+          <textarea id="headers">
+{ "x-auth": "secret", "x-user": "123" }</textarea
+          >
+          <label for="query">Query (JSON)</label>
+          <textarea id="query">{}</textarea>
+          <label for="body">Body (JSON)</label>
+          <textarea id="body">{}</textarea>
+          <div class="row">
+            <button
+              id="run"
+              aria-label="Run middleware chain with mock request"
+            >
+              Run Chain<span class="kbd">⌘↵</span>
+            </button>
+            <button
+              id="export"
+              aria-label="Export middleware chain as TypeScript code"
+            >
+              Export Code<span class="kbd">⌘E</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="card card-flex">
+          <h3>4) Timeline & Result</h3>
+          <div id="timeline" class="timeline"></div>
+          <pre id="result"></pre>
+        </div>
       </div>
     </div>
 

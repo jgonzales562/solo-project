@@ -1,13 +1,12 @@
 import type { RequestHandlerLike } from '../composer/composeTimed.js';
-// src/middlewares/registry.ts
-import cookieController from '../controllers/cookieController.ts';
+import cookieController from '../controllers/cookieController.js';
 
 export type MiddlewareMeta = {
   key: string;
   name: string;
   description: string;
-  defaults?: Record<string, any>;
-  factory: (options?: Record<string, any>) => RequestHandlerLike;
+  defaults?: Record<string, unknown>;
+  factory: (options?: Record<string, unknown>) => RequestHandlerLike;
 };
 // Helper: sleep
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -130,11 +129,7 @@ export const registry: MiddlewareMeta[] = [
         const idFromHeader = req.headers[String(header).toLowerCase()];
         if (idFromHeader && !res.locals.user)
           res.locals.user = { _id: idFromHeader };
-        return (cookieController as any).setSSIDCookie(
-          req as any,
-          res as any,
-          next as any
-        );
+        return cookieController.setSSIDCookie(req as any, res as any, next);
       },
   },
 ];
@@ -147,12 +142,17 @@ export function listMiddlewares() {
   }));
 }
 
+function findMiddleware(key: string) {
+  const meta = registry.find((m) => m.key === key);
+  if (!meta) throw new Error(`Unknown middleware: ${key}`);
+  return meta;
+}
+
 export function buildChain(
-  items: Array<{ key: string; options?: Record<string, any> }>
+  items: Array<{ key: string; options?: Record<string, unknown> }>
 ) {
   return items.map(({ key, options }) => {
-    const meta = registry.find((m) => m.key === key);
-    if (!meta) throw new Error(`Unknown middleware: ${key}`);
+    const meta = findMiddleware(key);
     return { key: meta.key, name: meta.name, handler: meta.factory(options) };
   });
 }

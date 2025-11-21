@@ -1,49 +1,164 @@
+// Constants
+const DEBOUNCE_DELAY = 300;
+const MIN_BAR_WIDTH = 2;
+
+// State
 const state = {
   all: [], // catalog
   selected: [], // [{ key, options }]
 };
 
+// Cache DOM elements
+const dom = {
+  get mwList() {
+    return document.getElementById('mw-list');
+  },
+  get selected() {
+    return document.getElementById('selected');
+  },
+  get method() {
+    return document.getElementById('method');
+  },
+  get path() {
+    return document.getElementById('path');
+  },
+  get headers() {
+    return document.getElementById('headers');
+  },
+  get query() {
+    return document.getElementById('query');
+  },
+  get body() {
+    return document.getElementById('body');
+  },
+  get timeline() {
+    return document.getElementById('timeline');
+  },
+  get result() {
+    return document.getElementById('result');
+  },
+  get runBtn() {
+    return document.getElementById('run');
+  },
+  get exportBtn() {
+    return document.getElementById('export');
+  },
+};
+
+// Helper functions
+function createElement(tag, className = '', textContent = '', children = []) {
+  const el = document.createElement(tag);
+  if (className) el.className = className;
+  if (textContent) el.textContent = textContent;
+  children.forEach((child) => {
+    if (typeof child === 'string') {
+      el.appendChild(document.createTextNode(child));
+    } else if (child) {
+      el.appendChild(child);
+    }
+  });
+  return el;
+}
+
+function clearElement(el) {
+  el.innerHTML = '';
+}
+
+function parseJSON(value, fieldName) {
+  try {
+    return JSON.parse(value || '{}');
+  } catch (e) {
+    throw new Error(`Invalid JSON in ${fieldName} field`);
+  }
+}
+
+function showError(message) {
+  alert(`Error: ${message}`);
+}
+
+function validateSelection() {
+  if (state.selected.length === 0) {
+    showError('Please select at least one middleware.');
+    return false;
+  }
+  return true;
+}
+
+function getMetaMap() {
+  return new Map(state.all.map((m) => [m.key, m]));
+}
+
 async function fetchCatalog() {
-  const res = await fetch('/api/middlewares');
-  const data = await res.json();
-  state.all = data.middlewares;
-  renderCatalog();
+  const list = dom.mwList;
+  if (list) {
+    clearElement(list);
+    list.appendChild(
+      createElement('p', 'loading-msg', 'Loading middleware...')
+    );
+  }
+
+  try {
+    const res = await fetch('/api/middlewares');
+    if (!res.ok) throw new Error('Failed to fetch middlewares');
+    const data = await res.json();
+    state.all = data.middlewares;
+    renderCatalog();
+  } catch (error) {
+    console.error('Failed to fetch middleware catalog:', error);
+    if (list) {
+      clearElement(list);
+      list.appendChild(
+        createElement(
+          'p',
+          'error-msg',
+          'Failed to load middleware catalog. Please refresh the page.'
+        )
+      );
+    }
+  }
 }
 function renderCatalog() {
-  const list = document.getElementById('mw-list');
-  list.innerHTML = '';
+  const list = dom.mwList;
+  if (!list) return;
+  clearElement(list);
+
   state.all.forEach((mw) => {
-    const row = document.createElement('div');
-    row.className = 'list';
-    row.innerHTML = `
-      <div>
-        <strong>${mw.name}</strong> <span class="badge">${mw.key}</span><br/>
-        <small>${mw.description}</small>
-      </div>
-      <div>
-        <button data-key="${mw.key}" class="add">Add</button>
-      </div>
-    `;
+    const button = createElement('button', 'add', 'Add');
+    button.setAttribute('aria-label', `Add ${mw.name} middleware`);
+    button.addEventListener('click', () => addSelected(mw.key));
+
+    const row = createElement('div', 'list', '', [
+      createElement('div', '', '', [
+        createElement('strong', null, mw.name),
+        ' ',
+        createElement('span', 'badge', mw.key),
+        createElement('br'),
+        createElement('small', null, mw.description),
+      ]),
+      createElement('div', '', '', [button]),
+    ]);
+
     list.appendChild(row);
   });
-  list
-    .querySelectorAll('.add')
-    .forEach((btn) =>
-      btn.addEventListener('click', () => addSelected(btn.dataset.key))
-    );
 }
 function addSelected(key) {
   const meta = state.all.find((m) => m.key === key);
-  state.selected.push({ key, options: structuredClone(meta?.defaults || {}) });
+  if (!meta) return;
+  const options =
+    typeof structuredClone === 'function'
+      ? structuredClone(meta.defaults || {})
+      : JSON.parse(JSON.stringify(meta.defaults || {}));
+  state.selected.push({ key, options });
   renderSelected();
 }
 
 function move(idx, dir) {
   const j = idx + dir;
   if (j < 0 || j >= state.selected.length) return;
-  const tmp = state.selected[idx];
-  state.selected[idx] = state.selected[j];
-  state.selected[j] = tmp;
+  [state.selected[idx], state.selected[j]] = [
+    state.selected[j],
+    state.selected[idx],
+  ];
   renderSelected();
 }
 function remove(idx) {
@@ -51,107 +166,193 @@ function remove(idx) {
   renderSelected();
 }
 function renderSelected() {
-  const cont = document.getElementById('selected');
-  cont.innerHTML = '';
+  const cont = dom.selected;
+  if (!cont) return;
+  clearElement(cont);
+
+  if (state.selected.length === 0) {
+    cont.appendChild(
+      createElement(
+        'p',
+        'loading-msg',
+        'No middleware selected. Add middleware from the left panel.'
+      )
+    );
+    return;
+  }
+
+  const metaMap = getMetaMap();
+
   state.selected.forEach((item, i) => {
-    const meta = state.all.find((m) => m.key === item.key);
-    const card = document.createElement('div');
-    card.className = 'card';
-    const text = JSON.stringify(item.options || {}, null, 2);
-    card.innerHTML = `
-      <div class="row" style="justify-content:space-between;">
-        <div><strong>${meta?.name}</strong> <span class="badge">${item.key}</span></div>
-        <div>
-          <button data-i="${i}" class="up">↑</button>
-          <button data-i="${i}" class="down">↓</button>
-          <button data-i="${i}" class="remove">✕</button>
-        </div>
-      </div>
-      <div class="col">
-        <label>Options (JSON)</label>
-        <textarea data-i="${i}" class="opts">${text}</textarea>
-      </div>
-    `;
+    const meta = metaMap.get(item.key);
+    if (!meta) return;
+
+    const createButton = (text, label, disabled, onClick) => {
+      const btn = createElement('button', null, text);
+      btn.setAttribute('aria-label', label);
+      btn.disabled = disabled;
+      btn.addEventListener('click', onClick);
+      return btn;
+    };
+
+    const card = createElement('div', 'card');
+    const headerRow = createElement('div', 'row row-between');
+    const titleDiv = createElement('div', '', '', [
+      createElement('strong', null, meta.name),
+      ' ',
+      createElement('span', 'badge', item.key),
+    ]);
+
+    const upBtn = createButton('↑', `Move ${meta.name} up`, i === 0, () =>
+      move(i, -1)
+    );
+    const downBtn = createButton(
+      '↓',
+      `Move ${meta.name} down`,
+      i === state.selected.length - 1,
+      () => move(i, 1)
+    );
+    const removeBtn = createButton('✕', `Remove ${meta.name}`, false, () =>
+      remove(i)
+    );
+
+    const buttonDiv = createElement('div', '', '', [upBtn, downBtn, removeBtn]);
+
+    headerRow.appendChild(titleDiv);
+    headerRow.appendChild(buttonDiv);
+
+    const colDiv = createElement('div', 'col');
+    colDiv.appendChild(createElement('label', null, 'Options (JSON)'));
+
+    const textarea = createElement('textarea', 'opts');
+    textarea.value = JSON.stringify(item.options, null, 2);
+
+    let parseTimeout;
+    textarea.addEventListener('input', () => {
+      clearTimeout(parseTimeout);
+      parseTimeout = setTimeout(() => {
+        try {
+          state.selected[i].options = JSON.parse(textarea.value || '{}');
+          textarea.classList.remove('json-invalid');
+          textarea.classList.add('json-valid');
+        } catch (e) {
+          textarea.classList.remove('json-valid');
+          textarea.classList.add('json-invalid');
+        }
+      }, DEBOUNCE_DELAY);
+    });
+
+    colDiv.appendChild(textarea);
+    card.appendChild(headerRow);
+    card.appendChild(colDiv);
     cont.appendChild(card);
   });
-  cont
-    .querySelectorAll('.up')
-    .forEach((b) =>
-      b.addEventListener('click', () => move(Number(b.dataset.i), -1))
-    );
-  cont
-    .querySelectorAll('.down')
-    .forEach((b) =>
-      b.addEventListener('click', () => move(Number(b.dataset.i), +1))
-    );
-  cont
-    .querySelectorAll('.remove')
-    .forEach((b) =>
-      b.addEventListener('click', () => remove(Number(b.dataset.i)))
-    );
-  cont.querySelectorAll('.opts').forEach((t) =>
-    t.addEventListener('input', () => {
-      try {
-        state.selected[Number(t.dataset.i)].options = JSON.parse(
-          t.value || '{}'
-        );
-      } catch {}
-    })
-  );
 }
 async function run() {
-  const payload = {
-    method: document.getElementById('method').value,
-    path: document.getElementById('path').value,
-    headers: JSON.parse(document.getElementById('headers').value || '{}'),
-    query: JSON.parse(document.getElementById('query').value || '{}'),
-    body: JSON.parse(document.getElementById('body').value || '{}'),
-  };
-  const res = await fetch('/api/compose/run', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ chain: state.selected, payload }),
-  });
-  const data = await res.json();
-  renderTimeline(data);
+  try {
+    if (!validateSelection()) return;
+
+    if (!dom.method || !dom.path || !dom.headers || !dom.query || !dom.body) {
+      throw new Error('Required form elements not found');
+    }
+
+    const headers = parseJSON(dom.headers.value, 'Headers');
+    const query = parseJSON(dom.query.value, 'Query');
+    const body = parseJSON(dom.body.value, 'Body');
+
+    const payload = {
+      method: dom.method.value,
+      path: dom.path.value,
+      headers,
+      query,
+      body,
+    };
+    const res = await fetch('/api/compose/run', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ chain: state.selected, payload }),
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.err || 'Failed to run chain');
+    }
+    const data = await res.json();
+    renderTimeline(data);
+  } catch (error) {
+    console.error('Failed to execute middleware chain:', error);
+    showError(error.message);
+  }
 }
 async function exportCode() {
-  const res = await fetch('/api/compose/export', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ chain: state.selected }),
-  });
-  const text = await res.text();
-  const pre = document.getElementById('result');
-  pre.textContent = text;
+  try {
+    if (!validateSelection()) return;
+
+    const res = await fetch('/api/compose/export', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ chain: state.selected }),
+    });
+    if (!res.ok) throw new Error('Failed to export code');
+    const text = await res.text();
+    if (dom.result) dom.result.textContent = text;
+  } catch (error) {
+    console.error('Failed to export middleware chain code:', error);
+    showError(error.message);
+  }
 }
 function renderTimeline(data) {
-  const t = document.getElementById('timeline');
-  const pre = document.getElementById('result');
-  t.innerHTML = '';
-  const max = Math.max(1, ...data.timeline.map((x) => x.durationMs));
-  data.timeline.forEach((item) => {
-    const row = document.createElement('div');
-    const bar = document.createElement('div');
-    bar.className = 'bar';
-    if (item.status === 'error') bar.classList.add('error');
-    if (item.status === 'short-circuit') bar.classList.add('short');
-    const span = document.createElement('span');
-    span.style.width = `${(item.durationMs / max) * 100}%`;
-    bar.appendChild(span);
-    row.appendChild(bar);
+  if (!dom.timeline || !dom.result) return;
+  clearElement(dom.timeline);
 
-    const label = document.createElement('div');
-    label.innerHTML = `<strong>${item.name}</strong> — ${
-      item.durationMs
-    } ms — ${item.status}${item.error ? ' — ' + item.error : ''}`;
-    t.appendChild(label);
-    t.appendChild(row);
+  const max = Math.max(1, ...data.timeline.map((x) => x.durationMs));
+  const allZero = data.timeline.every((x) => x.durationMs === 0);
+
+  data.timeline.forEach((item) => {
+    const span = createElement('span');
+    const widthPercent = allZero ? 100 : (item.durationMs / max) * 100;
+    span.style.width = `${Math.max(MIN_BAR_WIDTH, widthPercent)}%`;
+
+    const barClass =
+      item.status === 'error'
+        ? 'bar error'
+        : item.status === 'short-circuit'
+          ? 'bar short'
+          : 'bar';
+    const bar = createElement('div', barClass, '', [span]);
+
+    const labelText = ` — ${item.durationMs} ms — ${item.status}${
+      item.error ? ` — ${item.error}` : ''
+    }`;
+    const label = createElement('div', '', '', [
+      createElement('strong', null, item.name),
+      labelText,
+    ]);
+
+    dom.timeline.appendChild(label);
+    dom.timeline.appendChild(bar);
   });
-  pre.textContent = JSON.stringify(data.final, null, 2);
+
+  dom.result.textContent = JSON.stringify(data.final, null, 2);
 }
-// wiring
+
+// Initialize application
 fetchCatalog();
 renderSelected();
-document.getElementById('run').addEventListener('click', run);
-document.getElementById('export').addEventListener('click', exportCode);
+
+// Event listeners
+dom.runBtn?.addEventListener('click', run);
+dom.exportBtn?.addEventListener('click', exportCode);
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  // Ctrl/Cmd + Enter to run
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    e.preventDefault();
+    run();
+  }
+  // Ctrl/Cmd + E to export
+  if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
+    e.preventDefault();
+    exportCode();
+  }
+});

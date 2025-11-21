@@ -1,19 +1,35 @@
 {
   "name": "solo-project",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Interactive middleware composer for Express.js - visualize, test, and export middleware chains",
+  "main": "dist/server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "tsx watch src/server.ts",
-    "start": "node dist/server.js"
+    "build": "tsc",
+    "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "tsx watch src/server.ts",
+    "dev:client": "sleep 2 && browser-sync start --proxy localhost:3000 --files \"client/**/*\" --no-open --no-notify",
+    "start": "node dist/server.js",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "format": "prettier --write \"src/**/*.ts\" \"client/**/*.{js,html}\""
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/jgonzales562/solo-project.git"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "express",
+    "middleware",
+    "composer",
+    "testing",
+    "visualization",
+    "typescript"
+  ],
+  "author": "jgonzales562",
   "license": "ISC",
   "type": "module",
   "bugs": {
@@ -24,11 +40,17 @@
     "express": "^5.1.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/eslint__js": "^8.42.3",
     "@types/express": "^5.0.3",
     "@types/node": "^24.5.1",
-    "ts-node": "^10.9.2",
-    "ts-node-dev": "^2.0.0",
+    "browser-sync": "^3.0.4",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.39.1",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.6.2",
     "tsx": "^4.20.5",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.47.0"
   }
 }

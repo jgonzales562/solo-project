@@ -1,22 +1,51 @@
 import express from 'express';
 import path from 'path';
-import composeRoutes from './routes/composeRoutes.ts';
+import composeRoutes from './routes/composeRoutes.js';
+
+const DEFAULT_PORT = 3000;
 
 const app = express();
-app.use(express.json());
+
+// Security: Limit request body size
+app.use(express.json({ limit: '1mb' }));
+
+// Security headers
+const securityHeaders: express.RequestHandler = (_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  next();
+};
+app.use(securityHeaders);
 
 // API
 app.use('/api', composeRoutes);
 
 // Static client
-app.use(express.static(path.join(import.meta.dirname, '..', 'client')));
+const clientPath = path.join(import.meta.dirname, '..', 'client');
+app.use(express.static(clientPath));
 
 // 404 for non-file routes → serve index.html so the page loads
 app.use((_req, res) => {
-  res.sendFile(path.join(import.meta.dirname, '..', 'client', 'index.html'));
+  res.sendFile(path.join(clientPath, 'index.html'));
 });
 
-const PORT = process.env.PORT || 3000;
+// Error handling middleware
+app.use(
+  (
+    err: Error & { status?: number },
+    _req: express.Request,
+    res: express.Response,
+    _next: express.NextFunction
+  ) => {
+    console.error('Error:', err);
+    const status = err.status || 500;
+    const message = err.message || 'Internal Server Error';
+    res.status(status).json({ error: message });
+  }
+);
+
+const PORT = process.env.PORT || DEFAULT_PORT;
 app.listen(PORT, () => {
   console.log(`Middleware Composer listening on http://localhost:${PORT}`);
 });

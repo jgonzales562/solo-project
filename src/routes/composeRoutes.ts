@@ -2,35 +2,69 @@ import { Router } from 'express';
 import { listMiddlewares, buildChain } from '../middlewares/registry.js';
 import { runChain } from '../composer/composeTimed.js';
 
+type ChainItem = { key: string; options?: Record<string, unknown> };
+
 const router = Router();
+
+function validateChain(chain: any) {
+  if (!Array.isArray(chain)) {
+    return { valid: false, error: 'chain must be an array' };
+  }
+  return { valid: true };
+}
+
+function generateExportCode(chain: ChainItem[]): string {
+  const uniqueKeys = [...new Set(chain.map((c) => c.key))];
+  const imports = uniqueKeys.map((k) => `  ${k},`).join('\n');
+  const chainItems = chain
+    .map((c) => `  ${c.key}(${JSON.stringify(c.options || {})}),`)
+    .join('\n');
+
+  return `// Paste into your Express route file
+import {
+${imports}
+} from './middlewares/registryExports'; // adjust import to your project
+
+export const chain = [
+${chainItems}
+];
+
+// Example usage:
+// app.get('/your-route', ...chain, (req, res) => res.json({ ok: true }));
+`;
+}
+
 router.get('/middlewares', (_req, res) => {
   res.json({ middlewares: listMiddlewares() });
 });
+
 router.post('/compose/run', async (req, res) => {
   const { chain = [], payload } = req.body || {};
+  const validation = validateChain(chain);
+
+  if (!validation.valid) {
+    return res.status(400).json({ err: validation.error });
+  }
+
   try {
     const built = buildChain(chain);
     const result = await runChain({ chain: built, payload });
     res.json(result);
-  } catch (e: any) {
-    res.status(400).json({ err: e?.message || String(e) });
+  } catch (e) {
+    const error = e as Error;
+    res.status(400).json({ err: error?.message || String(e) });
   }
 });
+
 router.post('/compose/export', (req, res) => {
   const { chain = [] } = req.body || {};
-  // Produce pasteable TypeScript snippet
-  const imports = chain
-    .map((c: any) => c.key)
-    .filter((v: string, i: number, arr: string[]) => arr.indexOf(v) === i)
-    .map((k: string) => `  ${k},`)
-    .join('\n');
+  const validation = validateChain(chain);
 
-  const arr = chain
-    .map((c: any) => `  ${c.key}(${JSON.stringify(c.options || {})}),`)
-    .join('\n');
+  if (!validation.valid) {
+    return res.status(400).json({ err: validation.error });
+  }
 
-  const code = `// Paste into your Express route file\nimport {\n${imports}\n} from './middlewares/registryExports'; // adjust import to your project\n\nexport const chain = [\n${arr}\n];\n\n// Example usage:\n// app.get('/your-route', ...chain, (req, res) => res.json({ ok: true }));\n`;
-
+  const code = generateExportCode(chain as ChainItem[]);
   res.setHeader('content-type', 'text/plain');
   res.send(code);
 });
