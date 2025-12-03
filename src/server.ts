@@ -10,8 +10,28 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 
-// Security: Limit request body size
-app.use(express.json({ limit: '1mb' }));
+const REQUEST_BODY_LIMIT_BYTES =
+  Number(process.env.REQUEST_BODY_LIMIT_BYTES) || 1_000_000;
+const REQUEST_BODY_LIMIT = `${REQUEST_BODY_LIMIT_BYTES}b`;
+
+// Security: Limit request body size (kept in sync with validation)
+app.use(express.json({ limit: REQUEST_BODY_LIMIT }));
+
+// Health endpoint (lightweight)
+app.get('/health', (_req, res) => {
+  res.json({ status: 'ok' });
+});
+
+// Readiness endpoint (checks middleware registry is available)
+app.get('/ready', (_req, res) => {
+  try {
+    if (!composeRoutes) throw new Error('router not initialized');
+    res.json({ status: 'ready' });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'not ready';
+    res.status(503).json({ status: 'not-ready', error: message });
+  }
+});
 
 // Security headers (modern defaults + CSP tuned for this app)
 app.use(
@@ -21,7 +41,7 @@ app.use(
       directives: {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'"], // inline styles in index.html
+        styleSrc: ["'self'"],
         imgSrc: ["'self'", 'data:'],
         connectSrc: ["'self'"],
         fontSrc: ["'self'", 'data:'],

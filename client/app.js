@@ -22,6 +22,9 @@ const dom = {
   get path() {
     return document.getElementById('path');
   },
+  get perStepTimeout() {
+    return document.getElementById('per-step-timeout');
+  },
   get headers() {
     return document.getElementById('headers');
   },
@@ -44,6 +47,9 @@ const dom = {
     return document.getElementById('export');
   },
 };
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const SPINNER = createElement('span', 'spinner', '⏳');
 
 // Helper functions
 function createElement(tag, className = '', textContent = '', children = []) {
@@ -96,17 +102,38 @@ function showError(message) {
 }
 
 // Reusable API call wrapper to reduce duplication
-async function apiCall(url, options = {}) {
-  const res = await fetch(url, options);
-  if (!res.ok) {
-    const contentType = res.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      const error = await res.json();
-      throw new Error(error.err || `Request failed: ${res.status}`);
+async function apiCall(url, options = {}, retryConfig = {}) {
+  const { retries = 2, retryDelayMs = 300 } = retryConfig;
+  let lastError;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url, options);
+      if (!res.ok) {
+        // Retry server errors; surface others immediately
+        if (res.status >= 500 && attempt < retries) {
+          await sleep(retryDelayMs * (attempt + 1));
+          continue;
+        }
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const error = await res.json();
+          throw new Error(error.err || `Request failed: ${res.status}`);
+        }
+        throw new Error(`Request failed: ${res.status}`);
+      }
+      return res;
+    } catch (err) {
+      lastError = err;
+      if (attempt < retries) {
+        await sleep(retryDelayMs * (attempt + 1));
+        continue;
+      }
+      throw err instanceof Error ? err : new Error(String(err));
     }
-    throw new Error(`Request failed: ${res.status}`);
   }
-  return res;
+
+  throw lastError instanceof Error ? lastError : new Error('Request failed');
 }
 
 function validateSelection() {
@@ -290,16 +317,30 @@ function renderSelected() {
   });
 }
 async function run() {
+  let started = false;
   try {
     if (!validateSelection()) return;
+    beginBusy();
+    started = true;
 
-    if (!dom.method || !dom.path || !dom.headers || !dom.query || !dom.body) {
+    if (
+      !dom.method ||
+      !dom.path ||
+      !dom.headers ||
+      !dom.query ||
+      !dom.body ||
+      !dom.perStepTimeout
+    ) {
       throw new Error('Required form elements not found');
     }
 
     const headers = parseJSON(dom.headers.value, 'Headers');
     const query = parseJSON(dom.query.value, 'Query');
     const body = parseJSON(dom.body.value, 'Body');
+    const perStepTimeoutMs = Number(dom.perStepTimeout.value);
+    if (!Number.isFinite(perStepTimeoutMs) || perStepTimeoutMs <= 0) {
+      throw new Error('Per-step timeout must be a positive number');
+    }
 
     const payload = {
       method: dom.method.value,
@@ -311,18 +352,23 @@ async function run() {
     const res = await apiCall('/api/compose/run', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ chain: state.selected, payload }),
+      body: JSON.stringify({ chain: state.selected, payload, perStepTimeoutMs }),
     });
     const data = await res.json();
     renderTimeline(data);
   } catch (error) {
     console.error('Failed to execute middleware chain:', error);
     showError(error.message);
+  } finally {
+    if (started) endBusy();
   }
 }
 async function exportCode() {
+  let started = false;
   try {
     if (!validateSelection()) return;
+    beginBusy();
+    started = true;
 
     const res = await apiCall('/api/compose/export', {
       method: 'POST',
@@ -334,6 +380,8 @@ async function exportCode() {
   } catch (error) {
     console.error('Failed to export middleware chain code:', error);
     showError(error.message);
+  } finally {
+    if (started) endBusy();
   }
 }
 function renderTimeline(data) {
@@ -374,6 +422,39 @@ function renderTimeline(data) {
 // Initialize application
 fetchCatalog();
 renderSelected();
+
+// Disable buttons during in-flight requests to prevent duplicate submissions
+let pendingActions = 0;
+function updateBusyState() {
+  const disabled = pendingActions > 0;
+  if (dom.runBtn) {
+    dom.runBtn.disabled = disabled;
+    toggleSpinner(dom.runBtn, disabled);
+  }
+  if (dom.exportBtn) {
+    dom.exportBtn.disabled = disabled;
+    toggleSpinner(dom.exportBtn, disabled);
+  }
+}
+function beginBusy() {
+  pendingActions += 1;
+  updateBusyState();
+}
+function endBusy() {
+  pendingActions = Math.max(0, pendingActions - 1);
+  updateBusyState();
+}
+function toggleSpinner(button, show) {
+  const existing = button.querySelector('.spinner');
+  if (show) {
+    if (existing) return;
+    const clone = SPINNER.cloneNode(true);
+    clone.setAttribute('aria-hidden', 'true');
+    button.appendChild(clone);
+  } else if (existing) {
+    existing.remove();
+  }
+}
 
 // Event listeners
 dom.runBtn?.addEventListener('click', run);

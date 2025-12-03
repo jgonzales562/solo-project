@@ -21,6 +21,8 @@ Requires Node.js 18+ (repo `.nvmrc` targets 20.x). If you use `nvm`, run `nvm us
 npm install
 ```
 
+Requires Node.js 18+ (repo `.nvmrc` targets 20.x). If you use `nvm`, run `nvm use`.
+
 ### Development
 
 ```bash
@@ -91,6 +93,8 @@ npm start
 - `GET /api/middlewares` - Returns middleware catalog
 - `POST /api/compose/run` - Executes middleware chain with mock request
 - `POST /api/compose/export` - Generates TypeScript code snippet
+- `GET /health` - Liveness probe
+- `GET /ready` - Readiness probe
 
 ## License
 

@@ -12,6 +12,24 @@ const MAX_STRING_LENGTH = 10000;
 const MAX_HEADER_VALUE_LENGTH = 1000;
 const MAX_BODY_KEYS = 100;
 const MAX_BODY_STRING_LENGTH = 10000;
+const MAX_BODY_SERIALIZED_LENGTH = getSerializedBodyLimit();
+const REQUEST_BODY_LIMIT_BYTES = getRequestBodyLimitBytes();
+const MAX_PER_STEP_TIMEOUT_MS = 10000;
+
+function getSerializedBodyLimit(): number {
+  const raw = process.env.MAX_BODY_SERIALIZED_LENGTH;
+  const parsed = Number(raw);
+  if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  return 50000;
+}
+
+function getRequestBodyLimitBytes(): number {
+  const raw = process.env.REQUEST_BODY_LIMIT_BYTES;
+  const parsed = Number(raw);
+  if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  // default to 1MB to match express.json limit
+  return 1_000_000;
+}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -55,12 +73,13 @@ function validatePayload(payload: unknown): { valid: boolean; error?: string } {
     return { valid: false, error: 'payload.method must be a string' };
   }
 
-  if (payload.path !== undefined && typeof payload.path !== 'string') {
-    return { valid: false, error: 'payload.path must be a string' };
-  }
-
-  if (payload.path && payload.path.length > MAX_STRING_LENGTH) {
-    return { valid: false, error: `payload.path exceeds maximum length of ${MAX_STRING_LENGTH}` };
+  if (payload.path !== undefined) {
+    if (typeof payload.path !== 'string') {
+      return { valid: false, error: 'payload.path must be a string' };
+    }
+    if (payload.path.length > MAX_STRING_LENGTH) {
+      return { valid: false, error: `payload.path exceeds maximum length of ${MAX_STRING_LENGTH}` };
+    }
   }
 
   if (payload.headers !== undefined) {
@@ -105,8 +124,40 @@ function validatePayload(payload: unknown): { valid: boolean; error?: string } {
         };
       }
     }
+    try {
+      const serialized = JSON.stringify(payload.body);
+      if (serialized.length > MAX_BODY_SERIALIZED_LENGTH) {
+        return {
+          valid: false,
+          error: `payload.body serialized size exceeds maximum length of ${MAX_BODY_SERIALIZED_LENGTH}`,
+        };
+      }
+      if (Buffer.byteLength(serialized, 'utf8') > REQUEST_BODY_LIMIT_BYTES) {
+        return {
+          valid: false,
+          error: `payload.body exceeds maximum byte size of ${REQUEST_BODY_LIMIT_BYTES}`,
+        };
+      }
+    } catch {
+      return { valid: false, error: 'payload.body must be JSON-serializable' };
+    }
   }
 
+  return { valid: true };
+}
+
+function validatePerStepTimeout(value: unknown): { valid: boolean; error?: string } {
+  if (value === undefined) return { valid: true };
+  const num = Number(value);
+  if (!Number.isFinite(num) || num <= 0) {
+    return { valid: false, error: 'perStepTimeoutMs must be a positive number' };
+  }
+  if (num > MAX_PER_STEP_TIMEOUT_MS) {
+    return {
+      valid: false,
+      error: `perStepTimeoutMs exceeds maximum of ${MAX_PER_STEP_TIMEOUT_MS} ms`,
+    };
+  }
   return { valid: true };
 }
 
@@ -130,11 +181,12 @@ ${chainItems}
 }
 
 router.get('/middlewares', (_req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=300');
   res.json({ middlewares: listMiddlewares() });
 });
 
 router.post('/compose/run', async (req, res) => {
-  const { chain = [], payload } = req.body || {};
+  const { chain = [], payload, perStepTimeoutMs } = req.body || {};
 
   const chainValidation = validateChain(chain);
   if (!chainValidation.valid) {
@@ -146,9 +198,18 @@ router.post('/compose/run', async (req, res) => {
     return res.status(400).json({ err: payloadValidation.error });
   }
 
+  const timeoutValidation = validatePerStepTimeout(perStepTimeoutMs);
+  if (!timeoutValidation.valid) {
+    return res.status(400).json({ err: timeoutValidation.error });
+  }
+
   try {
     const built = buildChain(chain as ChainItem[]);
-    const result = await runChain({ chain: built, payload });
+    const result = await runChain({
+      chain: built,
+      payload,
+      perStepTimeoutMs: perStepTimeoutMs ? Number(perStepTimeoutMs) : undefined,
+    });
     res.json(result);
   } catch (e) {
     const error = e instanceof Error ? e : new Error(String(e));

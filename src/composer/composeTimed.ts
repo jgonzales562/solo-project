@@ -151,6 +151,7 @@ export async function runChain({
 
     await new Promise<void>((resolve) => {
       let resolved = false;
+      let nextCalled = false;
 
       // Safe resolve to prevent double-resolution race condition
       const safeResolve = () => {
@@ -172,6 +173,8 @@ export async function runChain({
       }, perStepTimeoutMs);
 
       const next: Next = (err?: unknown) => {
+        if (nextCalled) return;
+        nextCalled = true;
         if (err) {
           status = 'error';
           errorMsg = getErrorMessage(err);
