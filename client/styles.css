@@ -199,3 +199,9 @@ button:disabled:hover {
   font-size: 12px;
   vertical-align: middle;
 }
+.inline-error {
+  min-height: 20px;
+  color: #dc2626;
+  margin-bottom: 8px;
+  font-size: 14px;
+}

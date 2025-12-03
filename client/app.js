@@ -46,10 +46,14 @@ const dom = {
   get exportBtn() {
     return document.getElementById('export');
   },
+  get inlineError() {
+    return document.getElementById('inline-error');
+  },
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const SPINNER = createElement('span', 'spinner', '⏳');
+let csrfToken = null;
 
 // Helper functions
 function createElement(tag, className = '', textContent = '', children = []) {
@@ -108,6 +112,17 @@ async function apiCall(url, options = {}, retryConfig = {}) {
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
+      if ((options.method || 'GET').toUpperCase() !== 'GET') {
+        try {
+          await ensureCsrfToken();
+          options.headers = {
+            ...(options.headers || {}),
+            'x-csrf-token': csrfToken,
+          };
+        } catch (tokenErr) {
+          throw tokenErr instanceof Error ? tokenErr : new Error(String(tokenErr));
+        }
+      }
       const res = await fetch(url, options);
       if (!res.ok) {
         // Retry server errors; surface others immediately
@@ -118,7 +133,12 @@ async function apiCall(url, options = {}, retryConfig = {}) {
         const contentType = res.headers.get('content-type') || '';
         if (contentType.includes('application/json')) {
           const error = await res.json();
-          throw new Error(error.err || `Request failed: ${res.status}`);
+          const msg =
+            error?.error?.message ||
+            error?.err ||
+            error?.message ||
+            `Request failed: ${res.status}`;
+          throw new Error(msg);
         }
         throw new Error(`Request failed: ${res.status}`);
       }
@@ -134,6 +154,23 @@ async function apiCall(url, options = {}, retryConfig = {}) {
   }
 
   throw lastError instanceof Error ? lastError : new Error('Request failed');
+}
+function showInlineError(message) {
+  if (!dom.inlineError) return;
+  dom.inlineError.textContent = message || '';
+}
+function clearInlineError() {
+  if (!dom.inlineError) return;
+  dom.inlineError.textContent = '';
+}
+
+async function ensureCsrfToken() {
+  if (csrfToken) return csrfToken;
+  const res = await fetch('/api/csrf', { method: 'GET', credentials: 'same-origin' });
+  if (!res.ok) throw new Error('Failed to fetch CSRF token');
+  const data = await res.json();
+  csrfToken = data.token;
+  return csrfToken;
 }
 
 function validateSelection() {
@@ -334,6 +371,8 @@ async function run() {
       throw new Error('Required form elements not found');
     }
 
+    clearInlineError();
+
     const headers = parseJSON(dom.headers.value, 'Headers');
     const query = parseJSON(dom.query.value, 'Query');
     const body = parseJSON(dom.body.value, 'Body');
@@ -341,6 +380,8 @@ async function run() {
     if (!Number.isFinite(perStepTimeoutMs) || perStepTimeoutMs <= 0) {
       throw new Error('Per-step timeout must be a positive number');
     }
+
+    persistFormState();
 
     const payload = {
       method: dom.method.value,
@@ -358,6 +399,7 @@ async function run() {
     renderTimeline(data);
   } catch (error) {
     console.error('Failed to execute middleware chain:', error);
+    showInlineError(error.message);
     showError(error.message);
   } finally {
     if (started) endBusy();
@@ -379,6 +421,7 @@ async function exportCode() {
     if (dom.result) dom.result.textContent = text;
   } catch (error) {
     console.error('Failed to export middleware chain code:', error);
+    showInlineError(error.message);
     showError(error.message);
   } finally {
     if (started) endBusy();
@@ -444,6 +487,41 @@ function endBusy() {
   pendingActions = Math.max(0, pendingActions - 1);
   updateBusyState();
 }
+
+// Persist form state to localStorage
+function persistFormState() {
+  const data = {};
+  if (dom.method) data.method = dom.method.value;
+  if (dom.path) data.path = dom.path.value;
+  if (dom.headers) data.headers = dom.headers.value;
+  if (dom.query) data.query = dom.query.value;
+  if (dom.body) data.body = dom.body.value;
+  if (dom.perStepTimeout) data['per-step-timeout'] = dom.perStepTimeout.value;
+  try {
+    localStorage.setItem('composer.form', JSON.stringify(data));
+  } catch (err) {
+    console.warn('Could not persist form state:', err);
+  }
+}
+
+function restoreFormState() {
+  try {
+    const raw = localStorage.getItem('composer.form');
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (dom.method && data.method) dom.method.value = data.method;
+    if (dom.path && data.path) dom.path.value = data.path;
+    if (dom.headers && data.headers) dom.headers.value = data.headers;
+    if (dom.query && data.query) dom.query.value = data.query;
+    if (dom.body && data.body) dom.body.value = data.body;
+    if (dom.perStepTimeout && data['per-step-timeout'])
+      dom.perStepTimeout.value = data['per-step-timeout'];
+  } catch (err) {
+    console.warn('Could not restore form state:', err);
+  }
+}
+
+restoreFormState();
 function toggleSpinner(button, show) {
   const existing = button.querySelector('.spinner');
   if (show) {

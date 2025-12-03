@@ -1,10 +1,27 @@
 import { Router } from 'express';
+import type { Response } from 'express';
 import { listMiddlewares, buildChain } from '../middlewares/registry.js';
 import { runChain } from '../composer/composeTimed.js';
 
 type ChainItem = { key: string; options?: Record<string, unknown> };
 
 const router = Router();
+type TelemetryEntry = {
+  count: number;
+  errors: number;
+  totalDurationMs: number;
+};
+const telemetry: {
+  totalRuns: number;
+  totalErrors: number;
+  totalDurationMs: number;
+  middlewares: Record<string, TelemetryEntry>;
+} = {
+  totalRuns: 0,
+  totalErrors: 0,
+  totalDurationMs: 0,
+  middlewares: {},
+};
 
 const MAX_CHAIN_LENGTH = 50;
 const MAX_PAYLOAD_KEYS = 100;
@@ -15,6 +32,7 @@ const MAX_BODY_STRING_LENGTH = 10000;
 const MAX_BODY_SERIALIZED_LENGTH = getSerializedBodyLimit();
 const REQUEST_BODY_LIMIT_BYTES = getRequestBodyLimitBytes();
 const MAX_PER_STEP_TIMEOUT_MS = 10000;
+const MAX_BODY_DEPTH = 10;
 
 function getSerializedBodyLimit(): number {
   const raw = process.env.MAX_BODY_SERIALIZED_LENGTH;
@@ -138,6 +156,9 @@ function validatePayload(payload: unknown): { valid: boolean; error?: string } {
           error: `payload.body exceeds maximum byte size of ${REQUEST_BODY_LIMIT_BYTES}`,
         };
       }
+      if (exceedsDepth(payload.body, MAX_BODY_DEPTH)) {
+        return { valid: false, error: `payload.body exceeds maximum depth of ${MAX_BODY_DEPTH}` };
+      }
     } catch {
       return { valid: false, error: 'payload.body must be JSON-serializable' };
     }
@@ -159,6 +180,44 @@ function validatePerStepTimeout(value: unknown): { valid: boolean; error?: strin
     };
   }
   return { valid: true };
+}
+
+function exceedsDepth(value: unknown, maxDepth: number, depth = 0): boolean {
+  if (depth > maxDepth) return true;
+  if (Array.isArray(value)) {
+    return value.some((v) => exceedsDepth(v, maxDepth, depth + 1));
+  }
+  if (isPlainObject(value)) {
+    return Object.values(value).some((v) => exceedsDepth(v, maxDepth, depth + 1));
+  }
+  return false;
+}
+
+function sendError(res: Response, status: number, code: string, message: string) {
+  res.status(status).json({ error: { code, message } });
+}
+
+function recordTelemetry(result: Awaited<ReturnType<typeof runChain>>) {
+  telemetry.totalRuns += 1;
+  const hadError = result.timeline.some((t) => t.status === 'error' || t.status === 'timeout');
+  if (hadError) telemetry.totalErrors += 1;
+
+  const chainDuration = result.timeline.reduce((acc, item) => acc + item.durationMs, 0);
+  telemetry.totalDurationMs += chainDuration;
+
+  for (const item of result.timeline) {
+    const entry = telemetry.middlewares[item.key] || {
+      count: 0,
+      errors: 0,
+      totalDurationMs: 0,
+    };
+    entry.count += 1;
+    if (item.status === 'error' || item.status === 'timeout') {
+      entry.errors += 1;
+    }
+    entry.totalDurationMs += item.durationMs;
+    telemetry.middlewares[item.key] = entry;
+  }
 }
 
 function generateExportCode(chain: ChainItem[]): string {
@@ -190,17 +249,17 @@ router.post('/compose/run', async (req, res) => {
 
   const chainValidation = validateChain(chain);
   if (!chainValidation.valid) {
-    return res.status(400).json({ err: chainValidation.error });
+    return sendError(res, 400, 'invalid_chain', chainValidation.error ?? 'Invalid chain');
   }
 
   const payloadValidation = validatePayload(payload);
   if (!payloadValidation.valid) {
-    return res.status(400).json({ err: payloadValidation.error });
+    return sendError(res, 400, 'invalid_payload', payloadValidation.error ?? 'Invalid payload');
   }
 
   const timeoutValidation = validatePerStepTimeout(perStepTimeoutMs);
   if (!timeoutValidation.valid) {
-    return res.status(400).json({ err: timeoutValidation.error });
+    return sendError(res, 400, 'invalid_timeout', timeoutValidation.error ?? 'Invalid timeout');
   }
 
   try {
@@ -210,10 +269,11 @@ router.post('/compose/run', async (req, res) => {
       payload,
       perStepTimeoutMs: perStepTimeoutMs ? Number(perStepTimeoutMs) : undefined,
     });
+    recordTelemetry(result);
     res.json(result);
   } catch (e) {
     const error = e instanceof Error ? e : new Error(String(e));
-    res.status(400).json({ err: error.message });
+    sendError(res, 400, 'compose_error', error.message);
   }
 });
 
@@ -222,12 +282,23 @@ router.post('/compose/export', (req, res) => {
   const validation = validateChain(chain);
 
   if (!validation.valid) {
-    return res.status(400).json({ err: validation.error });
+    return sendError(res, 400, 'invalid_chain', validation.error ?? 'Invalid chain');
   }
 
   const code = generateExportCode(chain as ChainItem[]);
   res.setHeader('content-type', 'text/plain');
   res.send(code);
+});
+
+router.get('/telemetry', (_req, res) => {
+  const avgDuration =
+    telemetry.totalRuns === 0 ? 0 : telemetry.totalDurationMs / telemetry.totalRuns;
+  res.json({
+    totalRuns: telemetry.totalRuns,
+    totalErrors: telemetry.totalErrors,
+    avgDurationMs: Math.round(avgDuration * 100) / 100,
+    middlewares: telemetry.middlewares,
+  });
 });
 
 export default router;

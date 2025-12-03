@@ -1,0 +1,14 @@
+version: '3.9'
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      REQUEST_BODY_LIMIT_BYTES: 1000000
+      MAX_BODY_SERIALIZED_LENGTH: 50000
+      RATE_LIMIT_ENABLED: "true"
+      LOG_REQUESTS: "false"
+    restart: unless-stopped
