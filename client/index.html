@@ -166,6 +166,44 @@
       .json-invalid {
         border-color: #dc2626 !important;
       }
+      .error-toast {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: #dc2626;
+        color: white;
+        padding: 12px 16px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        z-index: 1000;
+        animation: slideIn 0.2s ease-out;
+      }
+      @keyframes slideIn {
+        from {
+          transform: translateX(100%);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+      .toast-close {
+        background: transparent;
+        border: none;
+        color: white;
+        font-size: 18px;
+        padding: 0 4px;
+        cursor: pointer;
+        opacity: 0.8;
+      }
+      .toast-close:hover {
+        opacity: 1;
+        background: transparent;
+      }
     </style>
   </head>
   <body>

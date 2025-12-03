@@ -1,28 +1,43 @@
 import express from 'express';
+import helmet from 'helmet';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import composeRoutes from './routes/composeRoutes.js';
 
 const DEFAULT_PORT = 3000;
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 
 // Security: Limit request body size
 app.use(express.json({ limit: '1mb' }));
 
-// Security headers
-const securityHeaders: express.RequestHandler = (_req, res, next) => {
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('X-XSS-Protection', '1; mode=block');
-  next();
-};
-app.use(securityHeaders);
+// Security headers (modern defaults + CSP tuned for this app)
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"], // inline styles in index.html
+        imgSrc: ["'self'", 'data:'],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'", 'data:'],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        frameAncestors: ["'none'"],
+      },
+    },
+  })
+);
 
 // API
 app.use('/api', composeRoutes);
 
 // Static client
-const clientPath = path.join(import.meta.dirname, '..', 'client');
+const clientPath = path.join(__dirname, '..', 'client');
 app.use(express.static(clientPath));
 
 // 404 for non-file routes → serve index.html so the page loads

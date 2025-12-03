@@ -3,29 +3,40 @@ export type Req = {
   path: string;
   headers: Record<string, string>;
   query: Record<string, string>;
-  body: any;
+  body: unknown;
+};
+
+type LocalUser = {
+  _id?: string;
+  id?: string;
+  role?: string;
+};
+
+type Locals = Record<string, unknown> & {
+  logs?: string[];
+  user?: LocalUser;
 };
 
 export type Res = {
-  locals: Record<string, any>;
+  locals: Locals;
   statusCode: number;
   headers: Record<string, string>;
   cookies: Array<{
     name: string;
     value: string;
-    options?: Record<string, any>;
+    options?: Record<string, unknown>;
   }>;
   responded: boolean;
-  responseBody?: any;
+  responseBody?: unknown;
   status: (code: number) => Res;
-  json: (data: any) => Res;
-  send: (data: any) => Res;
+  json: (data: unknown) => Res;
+  send: (data: unknown) => Res;
   setHeader: (name: string, value: string) => void;
-  cookie: (name: string, value: string, options?: Record<string, any>) => void;
+  cookie: (name: string, value: string, options?: Record<string, unknown>) => void;
 };
 
-export type Next = (err?: any) => void;
-export type RequestHandlerLike = (req: Req, res: Res, next: Next) => any;
+export type Next = (err?: unknown) => void;
+export type RequestHandlerLike = (req: Req, res: Res, next: Next) => void | Promise<void>;
 
 export type TimelineItem = {
   key: string;
@@ -34,7 +45,7 @@ export type TimelineItem = {
   durationMs: number;
   status: 'ok' | 'error' | 'short-circuit' | 'timeout';
   error?: string;
-  localsPreview?: Record<string, any>;
+  localsPreview?: Record<string, unknown>;
 };
 
 export type RunOptions = {
@@ -51,15 +62,24 @@ export type RunResult = {
     cookies: Array<{
       name: string;
       value: string;
-      options?: Record<string, any>;
+      options?: Record<string, unknown>;
     }>;
-    locals: Record<string, any>;
+    locals: Locals;
     responded: boolean;
-    body?: any;
+    body?: unknown;
   };
 };
 
-function createResponse(): Res {
+// Configuration constants
+const CONFIG = {
+  DEFAULT_STEP_TIMEOUT_MS: 2000,
+  DEFAULT_METHOD: 'GET',
+  DEFAULT_PATH: '/test',
+} as const;
+
+type ResponseCallback = () => void;
+
+function createResponse(onRespond?: ResponseCallback): Res {
   return {
     locals: {},
     statusCode: 200,
@@ -71,102 +91,109 @@ function createResponse(): Res {
       this.statusCode = code;
       return this;
     },
-    json(data: any) {
+    json(data: unknown) {
       this.responseBody = data;
       this.responded = true;
       this.setHeader('content-type', 'application/json');
+      onRespond?.();
       return this;
     },
-    send(data: any) {
+    send(data: unknown) {
       this.responseBody = data;
       this.responded = true;
+      onRespond?.();
       return this;
     },
     setHeader(name: string, value: string) {
       this.headers[name.toLowerCase()] = String(value);
     },
-    cookie(name: string, value: string, options?: Record<string, any>) {
+    cookie(name: string, value: string, options?: Record<string, unknown>) {
       this.cookies.push({ name, value, options });
     },
   };
 }
 
-function getErrorMessage(err: any): string {
-  return typeof err === 'string' ? err : err?.message || 'Error';
+function getErrorMessage(err: unknown): string {
+  if (typeof err === 'string') return err;
+  if (err instanceof Error) return err.message;
+  return 'Error';
 }
-
-const CHECK_INTERVAL_MS = 10;
 
 export async function runChain({
   chain,
   payload,
-  perStepTimeoutMs = 2000,
+  perStepTimeoutMs = CONFIG.DEFAULT_STEP_TIMEOUT_MS,
 }: RunOptions): Promise<RunResult> {
   const req: Req = {
-    method: payload?.method || 'GET',
-    path: payload?.path || '/test',
+    method: payload?.method ?? CONFIG.DEFAULT_METHOD,
+    path: payload?.path ?? CONFIG.DEFAULT_PATH,
     headers: Object.fromEntries(
-      Object.entries(payload?.headers || {}).map(([k, v]) => [
+      Object.entries(payload?.headers ?? {}).map(([k, v]) => [
         k.toLowerCase(),
         String(v),
       ])
     ),
-    query: payload?.query || {},
+    query: payload?.query ?? {},
     body: payload?.body ?? null,
   };
 
-  const res = createResponse();
   const timeline: TimelineItem[] = [];
+
+  // Mutable callback reference that gets updated each step
+  // This replaces inefficient polling (setInterval) with event-driven resolution
+  let onRespondCallback: ResponseCallback | undefined;
+  const res = createResponse(() => onRespondCallback?.());
 
   for (const step of chain) {
     const startedAt = Date.now();
-    let ended = false;
     let status: TimelineItem['status'] = 'ok';
     let errorMsg: string | undefined;
 
-    await new Promise<void>(async (resolve) => {
-      let nextCalled = false;
+    await new Promise<void>((resolve) => {
+      let resolved = false;
+
+      // Safe resolve to prevent double-resolution race condition
+      const safeResolve = () => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timer);
+        onRespondCallback = undefined;
+        resolve();
+      };
+
+      // Set callback for when middleware responds without calling next
+      onRespondCallback = safeResolve;
+
       const timer = setTimeout(() => {
-        if (!ended) {
+        if (!resolved) {
           status = 'timeout';
-          ended = true;
-          resolve();
+          safeResolve();
         }
       }, perStepTimeoutMs);
-      const next: Next = (err?: any) => {
-        nextCalled = true;
+
+      const next: Next = (err?: unknown) => {
         if (err) {
           status = 'error';
           errorMsg = getErrorMessage(err);
         }
-        clearTimeout(timer);
-        ended = true;
-        resolve();
+        safeResolve();
       };
+
+      // Execute the middleware
       try {
         const maybe = step.handler(req, res, next);
         if (maybe instanceof Promise) {
-          await maybe.catch((e: any) => {
+          maybe.catch((e: unknown) => {
             status = 'error';
             errorMsg = getErrorMessage(e);
+            safeResolve();
           });
         }
-      } catch (e: any) {
+      } catch (e: unknown) {
         status = 'error';
         errorMsg = getErrorMessage(e);
-        clearTimeout(timer);
-        ended = true;
-        return resolve();
+        safeResolve();
       }
-      // If middleware neither called next nor responded, we wait until timeout.
-      const checkInterval = setInterval(() => {
-        if (nextCalled || res.responded) {
-          clearInterval(checkInterval);
-          clearTimeout(timer);
-          ended = true;
-          resolve();
-        }
-      }, CHECK_INTERVAL_MS);
     });
     const durationMs = Math.max(0, Date.now() - startedAt);
 
@@ -202,8 +229,8 @@ export async function runChain({
     },
   };
 }
-function shallowPreview(obj: Record<string, any>) {
-  const out: Record<string, any> = {};
+function shallowPreview(obj: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(obj)) {
     out[k] =
       typeof v === 'object' && v !== null

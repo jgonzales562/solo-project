@@ -13,6 +13,8 @@ An interactive tool for composing, testing, and visualizing Express.js middlewar
 
 ## Getting Started
 
+Requires Node.js 18+ (repo `.nvmrc` targets 20.x). If you use `nvm`, run `nvm use`.
+
 ### Installation
 
 ```bash
@@ -57,7 +59,7 @@ npm start
 - **Attach User** - Attaches user data from headers
 - **Respond** - Sends JSON response (short-circuits chain)
 - **Throw Error** - Tests error handling
-- **SSID Cookie** - Sets session cookie via controller
+- **SSID Cookie** - Sets an HttpOnly session cookie using built-in mock logic
 
 ## Architecture
 
@@ -77,11 +79,10 @@ npm start
 │   ├── routes/
 │   │   └── composeRoutes.ts # API endpoints
 │   ├── middlewares/
-│   │   └── registry.ts      # Middleware catalog
+│   │   ├── registry.ts           # Middleware catalog
+│   │   └── registryExports.ts    # Typed map of middleware factories
 │   ├── composer/
 │   │   └── composeTimed.ts  # Chain execution engine
-│   └── controllers/
-│       └── cookieController.ts
 └── dist/            # Compiled JavaScript (generated)
 ```
 

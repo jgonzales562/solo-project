@@ -1,5 +1,4 @@
-import type { RequestHandlerLike } from '../composer/composeTimed.js';
-import cookieController from '../controllers/cookieController.js';
+import type { Req, RequestHandlerLike } from '../composer/composeTimed.js';
 
 export type MiddlewareMeta = {
   key: string;
@@ -8,17 +7,25 @@ export type MiddlewareMeta = {
   defaults?: Record<string, unknown>;
   factory: (options?: Record<string, unknown>) => RequestHandlerLike;
 };
+
+// Helper: get header value (case-insensitive)
+const getHeader = (req: Req, name: unknown): string | undefined =>
+  req.headers[String(name).toLowerCase()];
+
 // Helper: sleep
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export const registry: MiddlewareMeta[] = [
+export const registry: readonly MiddlewareMeta[] = Object.freeze([
   {
     key: 'logger',
     name: 'Logger',
     description: 'Logs method, path, and a timestamp into res.locals.logs.',
     factory: () => (req, res, next) => {
       const line = `${new Date().toISOString()} ${req.method} ${req.path}`;
-      res.locals.logs = [...(res.locals.logs || []), line];
+      const existingLogs = Array.isArray(res.locals.logs)
+        ? res.locals.logs
+        : [];
+      res.locals.logs = [...existingLogs, line];
       next();
     },
   },
@@ -68,7 +75,7 @@ export const registry: MiddlewareMeta[] = [
     factory:
       ({ header = 'x-auth', token = 'secret' } = {}) =>
       (req, res, next) => {
-        const got = req.headers[String(header).toLowerCase()];
+        const got = getHeader(req, header);
         if (got !== String(token)) {
           res.status(401).json({ err: 'Unauthorized' });
           return; // short-circuit
@@ -83,11 +90,15 @@ export const registry: MiddlewareMeta[] = [
       'Reads x-user header and puts a fake user object on res.locals.',
     defaults: { header: 'x-user', defaultRole: 'viewer' },
     factory:
-      ({ header = 'x-user', defaultRole = 'viewer' } = {}) =>
+      ({ header = 'x-user', defaultRole = 'viewer' }: { header?: unknown; defaultRole?: string } = {}) =>
       (req, res, next) => {
-        const id = req.headers[String(header).toLowerCase()];
+        const id = getHeader(req, header);
         if (id) {
-          res.locals.user = { _id: id, id: id, role: defaultRole };
+          res.locals.user = {
+            _id: id,
+            id,
+            role: defaultRole ?? 'viewer',
+          };
         }
         next();
       },
@@ -126,13 +137,21 @@ export const registry: MiddlewareMeta[] = [
       ({ header = 'x-user-id' } = {}) =>
       (req, res, next) => {
         // If your real controller expects res.locals.user._id, provide it from a header when running the mock
-        const idFromHeader = req.headers[String(header).toLowerCase()];
+        const idFromHeader = getHeader(req, header);
         if (idFromHeader && !res.locals.user)
           res.locals.user = { _id: idFromHeader };
-        return cookieController.setSSIDCookie(req as any, res as any, next);
+
+        // Replicate cookieController.setSSIDCookie logic directly to avoid type mismatch
+        // This keeps the mock system self-contained without requiring Express type casting
+        const userId = res.locals?.user?._id;
+        if (!userId) {
+          return next(new Error('Missing user id'));
+        }
+        res.cookie('ssid', String(userId), { httpOnly: true });
+        return next();
       },
   },
-];
+]);
 export function listMiddlewares() {
   return registry.map(({ key, name, description, defaults }) => ({
     key,

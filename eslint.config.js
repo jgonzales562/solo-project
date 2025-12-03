@@ -1,6 +1,10 @@
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import prettier from 'eslint-config-prettier';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default tseslint.config(
   eslint.configs.recommended,
@@ -9,13 +13,33 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         projectService: true,
-        tsconfigRootDir: import.meta.dirname,
+        tsconfigRootDir: __dirname,
       },
     },
   },
   {
     files: ['**/*.js'],
     ...tseslint.configs.disableTypeChecked,
+  },
+  {
+    files: ['client/**/*.js'],
+    languageOptions: {
+      sourceType: 'module',
+      globals: {
+        window: 'readonly',
+        document: 'readonly',
+        navigator: 'readonly',
+        fetch: 'readonly',
+        localStorage: 'readonly',
+        console: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        structuredClone: 'readonly',
+      },
+    },
+    rules: {
+      'no-var': 'error',
+    },
   },
   {
     files: ['src/**/*.ts'],
@@ -38,6 +62,6 @@ export default tseslint.config(
   },
   prettier,
   {
-    ignores: ['dist/', 'node_modules/', 'client/', '*.config.js'],
+    ignores: ['dist/', 'node_modules/', '*.config.js'],
   }
 );

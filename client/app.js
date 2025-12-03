@@ -61,19 +61,52 @@ function createElement(tag, className = '', textContent = '', children = []) {
 }
 
 function clearElement(el) {
-  el.innerHTML = '';
+  el.replaceChildren();
 }
 
 function parseJSON(value, fieldName) {
   try {
     return JSON.parse(value || '{}');
-  } catch (e) {
+  } catch {
     throw new Error(`Invalid JSON in ${fieldName} field`);
   }
 }
 
+// Toast notification for errors (better UX than alert)
 function showError(message) {
-  alert(`Error: ${message}`);
+  // Remove existing toast if any
+  const existing = document.getElementById('error-toast');
+  if (existing) existing.remove();
+
+  const toast = createElement('div', 'error-toast');
+  toast.id = 'error-toast';
+  toast.setAttribute('role', 'alert');
+
+  const text = createElement('span', '', `Error: ${message}`);
+  const closeBtn = createElement('button', 'toast-close', '\u00d7');
+  closeBtn.setAttribute('aria-label', 'Close error');
+  closeBtn.addEventListener('click', () => toast.remove());
+
+  toast.appendChild(text);
+  toast.appendChild(closeBtn);
+  document.body.appendChild(toast);
+
+  // Auto-dismiss after 5 seconds
+  setTimeout(() => toast.remove(), 5000);
+}
+
+// Reusable API call wrapper to reduce duplication
+async function apiCall(url, options = {}) {
+  const res = await fetch(url, options);
+  if (!res.ok) {
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const error = await res.json();
+      throw new Error(error.err || `Request failed: ${res.status}`);
+    }
+    throw new Error(`Request failed: ${res.status}`);
+  }
+  return res;
 }
 
 function validateSelection() {
@@ -84,8 +117,17 @@ function validateSelection() {
   return true;
 }
 
+// Cached metadata map - invalidated when catalog changes
+let metaMapCache = null;
+let metaMapCacheKey = null;
+
 function getMetaMap() {
-  return new Map(state.all.map((m) => [m.key, m]));
+  // Invalidate cache if state.all reference changed
+  if (metaMapCacheKey !== state.all) {
+    metaMapCache = new Map(state.all.map((m) => [m.key, m]));
+    metaMapCacheKey = state.all;
+  }
+  return metaMapCache;
 }
 
 async function fetchCatalog() {
@@ -98,8 +140,7 @@ async function fetchCatalog() {
   }
 
   try {
-    const res = await fetch('/api/middlewares');
-    if (!res.ok) throw new Error('Failed to fetch middlewares');
+    const res = await apiCall('/api/middlewares');
     const data = await res.json();
     state.all = data.middlewares;
     renderCatalog();
@@ -235,7 +276,7 @@ function renderSelected() {
           state.selected[i].options = JSON.parse(textarea.value || '{}');
           textarea.classList.remove('json-invalid');
           textarea.classList.add('json-valid');
-        } catch (e) {
+        } catch {
           textarea.classList.remove('json-valid');
           textarea.classList.add('json-invalid');
         }
@@ -267,15 +308,11 @@ async function run() {
       query,
       body,
     };
-    const res = await fetch('/api/compose/run', {
+    const res = await apiCall('/api/compose/run', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ chain: state.selected, payload }),
     });
-    if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.err || 'Failed to run chain');
-    }
     const data = await res.json();
     renderTimeline(data);
   } catch (error) {
@@ -287,12 +324,11 @@ async function exportCode() {
   try {
     if (!validateSelection()) return;
 
-    const res = await fetch('/api/compose/export', {
+    const res = await apiCall('/api/compose/export', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ chain: state.selected }),
     });
-    if (!res.ok) throw new Error('Failed to export code');
     const text = await res.text();
     if (dom.result) dom.result.textContent = text;
   } catch (error) {

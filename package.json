@@ -10,8 +10,8 @@
     "dev:server": "tsx watch src/server.ts",
     "dev:client": "sleep 2 && browser-sync start --proxy localhost:3000 --files \"client/**/*\" --no-open --no-notify",
     "start": "node dist/server.js",
-    "lint": "eslint src/",
-    "lint:fix": "eslint src/ --fix",
+    "lint": "eslint src/ client/",
+    "lint:fix": "eslint src/ client/ --fix",
     "format": "prettier --write \"src/**/*.ts\" \"client/**/*.{js,html}\""
   },
   "engines": {
@@ -37,12 +37,14 @@
   },
   "homepage": "https://github.com/jgonzales562/solo-project#readme",
   "dependencies": {
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "helmet": "^8.1.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "@types/eslint__js": "^8.42.3",
     "@types/express": "^5.0.3",
+    "@types/helmet": "^0.0.48",
     "@types/node": "^24.5.1",
     "browser-sync": "^3.0.4",
     "concurrently": "^9.2.1",
