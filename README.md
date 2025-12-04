@@ -21,8 +21,6 @@ Requires Node.js 18+ (repo `.nvmrc` targets 20.x). If you use `nvm`, run `nvm us
 npm install
 ```
 
-Requires Node.js 18+ (repo `.nvmrc` targets 20.x). If you use `nvm`, run `nvm use`.
-
 ### Development
 
 ```bash

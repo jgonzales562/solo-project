@@ -4,8 +4,8 @@ import helmet from 'helmet';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import rateLimit from 'express-rate-limit';
-import csrf from 'csurf';
 import cookieParser from 'cookie-parser';
+import crypto from 'crypto';
 import composeRoutes from './routes/composeRoutes.js';
 
 const DEFAULT_PORT = 3000;
@@ -13,13 +13,20 @@ const DEFAULT_PORT = 3000;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
+// Honor X-Forwarded-* headers when behind proxies/load balancers (needed for rate limiting & CSRF)
+app.set('trust proxy', 1);
 
 const REQUEST_BODY_LIMIT_BYTES =
   Number(process.env.REQUEST_BODY_LIMIT_BYTES) || 1_000_000;
 const REQUEST_BODY_LIMIT = `${REQUEST_BODY_LIMIT_BYTES}b`;
 const LOG_REQUESTS = process.env.LOG_REQUESTS === 'true';
 const RATE_LIMIT_ENABLED = process.env.RATE_LIMIT_ENABLED !== 'false';
-const CSRF_SECURE_COOKIE = process.env.CSRF_SECURE_COOKIE === 'true';
+const NODE_ENV = process.env.NODE_ENV || 'development';
+const CSRF_SECURE_COOKIE =
+  process.env.CSRF_SECURE_COOKIE === 'true' ||
+  (process.env.CSRF_SECURE_COOKIE === undefined && NODE_ENV === 'production');
+const CSRF_COOKIE_NAME = 'csrf_token';
+const CSRF_HEADER_NAME = 'x-csrf-token';
 
 // Security: Limit request body size (kept in sync with validation)
 app.use(express.json({ limit: REQUEST_BODY_LIMIT }));
@@ -69,7 +76,7 @@ app.use(
       directives: {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'"],
-        styleSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", 'data:'],
         connectSrc: ["'self'"],
         fontSrc: ["'self'", 'data:'],
@@ -101,17 +108,54 @@ if (RATE_LIMIT_ENABLED) {
   app.use('/api', limiter);
 }
 
-const csrfProtection = csrf({
-  cookie: {
+function generateCsrfToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+function issueCsrfCookie(res: express.Response) {
+  const token = generateCsrfToken();
+  res.cookie(CSRF_COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: 'lax',
     secure: CSRF_SECURE_COOKIE,
-  },
-});
+    maxAge: 1000 * 60 * 60 * 2, // 2 hours
+  });
+  return token;
+}
+
+function createCsrfProtection() {
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const method = req.method.toUpperCase();
+    const isSafe = method === 'GET' || method === 'HEAD' || method === 'OPTIONS' || method === 'TRACE';
+
+    let cookieToken = req.cookies?.[CSRF_COOKIE_NAME] as string | undefined;
+    if (!cookieToken) {
+      cookieToken = issueCsrfCookie(res);
+      if (isSafe) return next();
+    }
+
+    if (isSafe) return next();
+
+    const headerToken =
+      req.get(CSRF_HEADER_NAME) ||
+      (typeof req.body === 'object' && req.body !== null ? (req.body as { _csrf?: string })._csrf : undefined);
+
+    if (!headerToken || headerToken !== cookieToken) {
+      return res
+        .status(403)
+        .json({ error: { code: 'csrf_invalid', message: 'Invalid CSRF token' } });
+    }
+
+    return next();
+  };
+}
+
+const csrfProtection = createCsrfProtection();
 
 // CSRF token endpoint
-app.get('/api/csrf', csrfProtection, (req, res) => {
-  res.json({ token: req.csrfToken() });
+app.get('/api/csrf', (req, res) => {
+  const token = issueCsrfCookie(res);
+  res.json({ token });
 });
 
 // API

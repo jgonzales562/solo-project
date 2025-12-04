@@ -33,6 +33,7 @@ const MAX_BODY_SERIALIZED_LENGTH = getSerializedBodyLimit();
 const REQUEST_BODY_LIMIT_BYTES = getRequestBodyLimitBytes();
 const MAX_PER_STEP_TIMEOUT_MS = 10000;
 const MAX_BODY_DEPTH = 10;
+const TELEMETRY_MIDDLEWARE_LIMIT = 200;
 
 function getSerializedBodyLimit(): number {
   const raw = process.env.MAX_BODY_SERIALIZED_LENGTH;
@@ -218,6 +219,8 @@ function recordTelemetry(result: Awaited<ReturnType<typeof runChain>>) {
     entry.totalDurationMs += item.durationMs;
     telemetry.middlewares[item.key] = entry;
   }
+
+  pruneTelemetry();
 }
 
 function generateExportCode(chain: ChainItem[]): string {
@@ -301,4 +304,18 @@ router.get('/telemetry', (_req, res) => {
   });
 });
 
+// 404 handler for unknown API routes
+router.use((_req, res) => {
+  sendError(res, 404, 'not_found', 'Route not found');
+});
+
 export default router;
+
+function pruneTelemetry() {
+  const keys = Object.keys(telemetry.middlewares);
+  const excess = keys.length - TELEMETRY_MIDDLEWARE_LIMIT;
+  if (excess <= 0) return;
+  for (let i = 0; i < excess; i++) {
+    delete telemetry.middlewares[keys[i]];
+  }
+}

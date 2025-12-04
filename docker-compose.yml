@@ -11,4 +11,9 @@ services:
       MAX_BODY_SERIALIZED_LENGTH: 50000
       RATE_LIMIT_ENABLED: "true"
       LOG_REQUESTS: "false"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     restart: unless-stopped

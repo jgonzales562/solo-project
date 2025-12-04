@@ -29,7 +29,8 @@ test('POST /api/compose/run rejects non-array chain', { skip: !canBind }, async 
   const app = createApp();
   const res = await request(app).post('/api/compose/run').send({ chain: {} });
   assert.equal(res.status, 400);
-  assert.match(res.body.err, /chain must be an array/i);
+  assert.equal(res.body.error.code, 'invalid_chain');
+  assert.match(res.body.error.message, /chain must be an array/i);
 });
 
 test('POST /api/compose/run executes and returns timeline/final', { skip: !canBind }, async () => {
@@ -51,11 +52,20 @@ test('POST /api/compose/run executes and returns timeline/final', { skip: !canBi
   assert.deepEqual(res.body.final.body, { ok: true });
 });
 
+test('GET unknown /api route returns JSON 404', { skip: !canBind }, async () => {
+  const app = createApp();
+  const res = await request(app).get('/api/does-not-exist');
+  assert.equal(res.status, 404);
+  assert.equal(res.body.error.code, 'not_found');
+  assert.match(res.body.error.message, /route not found/i);
+});
+
 test('POST /api/compose/export rejects invalid chain', { skip: !canBind }, async () => {
   const app = createApp();
   const res = await request(app)
     .post('/api/compose/export')
     .send({ chain: [{ key: '' }] });
   assert.equal(res.status, 400);
-  assert.match(res.body.err, /chain\[0\]\.key/i);
+  assert.equal(res.body.error.code, 'invalid_chain');
+  assert.match(res.body.error.message, /chain\[0\]\.key/i);
 });
