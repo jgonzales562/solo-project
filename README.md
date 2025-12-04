@@ -94,6 +94,11 @@ npm start
 - `GET /health` - Liveness probe
 - `GET /ready` - Readiness probe
 
+## Getting Help
+
+- Open an issue on GitHub with reproduction steps and Node version.
+- Run `npm test` before filing bugs to catch lint/build issues locally.
+
 ## License
 
 ISC

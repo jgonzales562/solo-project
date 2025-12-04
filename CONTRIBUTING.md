@@ -3,6 +3,7 @@
 ## Prerequisites
 - Node.js 18+ (repo `.nvmrc` targets 20.x). If you use `nvm`, run `nvm use`.
 - npm 9+ recommended.
+- `.nvmrc` is present; `nvm use` will align to the project version.
 
 ## Setup
 ```bash
@@ -17,5 +18,6 @@ npm install
 
 ## Notes
 - CSRF cookies default to `secure` in production; override with `CSRF_SECURE_COOKIE=false` only for local HTTP.
-- Health checks: `/health` (liveness), `/ready` (readiness).
+- Health checks: `/health` (liveness), `/ready` (readiness). Compose healthcheck is configured in `docker-compose.yml`.
 - Docker builds exclude dev files via `.dockerignore`; use `docker-compose up --build` to rebuild. 
+- Reporting bugs: include Node version, OS, and output of `npm test`.

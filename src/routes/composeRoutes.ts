@@ -16,11 +16,13 @@ const telemetry: {
   totalErrors: number;
   totalDurationMs: number;
   middlewares: Record<string, TelemetryEntry>;
+  lastResetAt: number;
 } = {
   totalRuns: 0,
   totalErrors: 0,
   totalDurationMs: 0,
   middlewares: {},
+  lastResetAt: Date.now(),
 };
 
 const MAX_CHAIN_LENGTH = 50;
@@ -34,6 +36,7 @@ const REQUEST_BODY_LIMIT_BYTES = getRequestBodyLimitBytes();
 const MAX_PER_STEP_TIMEOUT_MS = 10000;
 const MAX_BODY_DEPTH = 10;
 const TELEMETRY_MIDDLEWARE_LIMIT = 200;
+const TELEMETRY_RESET_MS = 1000 * 60 * 60 * 24; // 24h
 
 function getSerializedBodyLimit(): number {
   const raw = process.env.MAX_BODY_SERIALIZED_LENGTH;
@@ -199,9 +202,16 @@ function sendError(res: Response, status: number, code: string, message: string)
 }
 
 function recordTelemetry(result: Awaited<ReturnType<typeof runChain>>) {
+  maybeResetTelemetry();
   telemetry.totalRuns += 1;
   const hadError = result.timeline.some((t) => t.status === 'error' || t.status === 'timeout');
   if (hadError) telemetry.totalErrors += 1;
+  if (telemetry.totalRuns > Number.MAX_SAFE_INTEGER / 2) {
+    // Prevent numeric overflow by downscaling counts/durations occasionally
+    telemetry.totalRuns = Math.round(telemetry.totalRuns / 2);
+    telemetry.totalErrors = Math.round(telemetry.totalErrors / 2);
+    telemetry.totalDurationMs = Math.round(telemetry.totalDurationMs / 2);
+  }
 
   const chainDuration = result.timeline.reduce((acc, item) => acc + item.durationMs, 0);
   telemetry.totalDurationMs += chainDuration;
@@ -318,4 +328,14 @@ function pruneTelemetry() {
   for (let i = 0; i < excess; i++) {
     delete telemetry.middlewares[keys[i]];
   }
+}
+
+function maybeResetTelemetry() {
+  const now = Date.now();
+  if (now - telemetry.lastResetAt < TELEMETRY_RESET_MS) return;
+  telemetry.totalRuns = 0;
+  telemetry.totalErrors = 0;
+  telemetry.totalDurationMs = 0;
+  telemetry.middlewares = {};
+  telemetry.lastResetAt = now;
 }
