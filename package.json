@@ -5,9 +5,10 @@
   "main": "dist/server.js",
   "scripts": {
     "test": "npm run build && npm run lint && npm run test:integration",
-    "test:integration": "TS_NODE_PROJECT=tsconfig.test.json node --test --import \"data:text/javascript,import { register } from 'node:module'; import { pathToFileURL } from 'node:url'; register('ts-node/esm', pathToFileURL('./'));\" --test-reporter tap test/composeRoutes.test.ts",
-    "ci": "npm ci && npm run lint -- --max-warnings=0 && npm run build && npm run test:integration",
+    "test:integration": "node scripts/run-integration.mjs",
+    "ci": "npm run lint -- --max-warnings=0 && npm run build && npm run test:integration",
     "build": "tsc",
+    "clean": "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true});fs.rmSync('.tmp-test',{recursive:true,force:true});\"",
     "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "tsx watch src/server.ts",
     "dev:client": "sleep 2 && browser-sync start --proxy localhost:3000 --files \"client/**/*\" --no-open --no-notify",
@@ -15,10 +16,10 @@
     "start": "node dist/server.js",
     "lint": "eslint src/ client/",
     "lint:fix": "eslint src/ client/ --fix",
-    "format": "prettier --write \"src/**/*.ts\" \"client/**/*.{js,html}\""
+    "format": "prettier --write \"src/**/*.ts\" \"client/**/*.{js,html,css}\""
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.17.0"
   },
   "repository": {
     "type": "git",
@@ -52,7 +53,7 @@
     "@types/cookie-parser": "^1.4.10",
     "@types/eslint__js": "^8.42.3",
     "@types/express": "^5.0.3",
-    "@types/node": "^24.5.1",
+    "@types/node": "^20.17.6",
     "@types/supertest": "^6.0.3",
     "browser-sync": "^3.0.4",
     "concurrently": "^9.2.1",
@@ -60,7 +61,6 @@
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.6.2",
     "supertest": "^7.1.4",
-    "ts-node": "^10.9.2",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.47.0"

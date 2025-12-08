@@ -13,7 +13,7 @@ An interactive tool for composing, testing, and visualizing Express.js middlewar
 
 ## Getting Started
 
-Requires Node.js 18+ (repo `.nvmrc` targets 20.x). If you use `nvm`, run `nvm use`.
+Requires Node.js 20.17.0+ (repo `.nvmrc` matches the Docker image). If you use `nvm`, run `nvm use`.
 
 ### Installation
 
@@ -34,6 +34,35 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 ```bash
 npm run build
 npm start
+```
+
+### Docker Compose (example)
+
+The included `docker-compose.yml` runs the app in production mode. Override secrets in your environment:
+
+```bash
+CSRF_SECRET=replace-me docker-compose up --build
+```
+
+### Configuration
+
+Environment variables (defaults shown):
+
+- `PORT` (3000) – Server port.
+- `TRUST_PROXY` (false) – Set to `true`, a number, or a subnet (e.g., `loopback`, `10.0.0.0/8`) to honor `X-Forwarded-*` headers. Keep `false` unless behind a trusted proxy/load balancer.
+- `REQUEST_BODY_LIMIT_BYTES` (1_000_000) – Max JSON body size for API requests and validation (bytes).
+- `MAX_BODY_SERIALIZED_LENGTH` (50_000) – Max JSON-stringified payload length used by the validator.
+- `RATE_LIMIT_ENABLED` (true) – Enable API rate limiting.
+- `LOG_REQUESTS` (false) – Console log requests with timing.
+- `CSRF_SECURE_COOKIE` (true in production) – Set the CSRF cookie to `Secure`.
+- `CSRF_SECRET` – Required in production; dev fallback is auto-provided.
+
+### Clean workspace
+
+Remove build and test artifacts:
+
+```bash
+npm run clean
 ```
 
 ## How It Works

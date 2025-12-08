@@ -15,7 +15,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 // Honor X-Forwarded-* headers when behind proxies/load balancers (needed for rate limiting & CSRF)
-app.set('trust proxy', 1);
+if (config.trustProxy) {
+  app.set('trust proxy', config.trustProxy);
+}
 
 const REQUEST_BODY_LIMIT_BYTES = config.requestBodyLimitBytes;
 const REQUEST_BODY_LIMIT = `${REQUEST_BODY_LIMIT_BYTES}b`;
@@ -110,9 +112,25 @@ function generateCsrfToken() {
   return crypto.randomBytes(32).toString('hex');
 }
 
+function signToken(token: string) {
+  return `${token}.${crypto.createHmac('sha256', CSRF_SECRET).update(token).digest('hex')}`;
+}
+
+function verifySignature(value: string | undefined) {
+  if (!value) return undefined;
+  const parts = value.split('.');
+  if (parts.length !== 2) return undefined;
+  const [token, sig] = parts;
+  const expected = crypto.createHmac('sha256', CSRF_SECRET).update(token).digest('hex');
+  return sig === expected ? token : undefined;
+}
+
 function issueCsrfCookie(res: express.Response) {
+  if (!CSRF_SECRET) {
+    throw new Error('CSRF_SECRET is required in production');
+  }
   const token = generateCsrfToken();
-  res.cookie(CSRF_COOKIE_NAME, token, {
+  res.cookie(CSRF_COOKIE_NAME, signToken(token), {
     httpOnly: true,
     sameSite: 'lax',
     secure: CSRF_SECURE_COOKIE,
@@ -130,19 +148,6 @@ function createCsrfProtection() {
     }
     const method = req.method.toUpperCase();
     const isSafe = method === 'GET' || method === 'HEAD' || method === 'OPTIONS' || method === 'TRACE';
-
-    // Keep the cookie bound to this session by signing it
-    const verifySignature = (value: string | undefined) => {
-      if (!value) return undefined;
-      const parts = value.split('.');
-      if (parts.length !== 2) return undefined;
-      const [token, sig] = parts;
-      const expected = crypto.createHmac('sha256', CSRF_SECRET).update(token).digest('hex');
-      return sig === expected ? token : undefined;
-    };
-
-    const signToken = (token: string) =>
-      `${token}.${crypto.createHmac('sha256', CSRF_SECRET).update(token).digest('hex')}`;
 
     const cookieToken = req.cookies?.[CSRF_COOKIE_NAME] as string | undefined;
     let verifiedToken = verifySignature(cookieToken);
@@ -176,9 +181,14 @@ function createCsrfProtection() {
 const csrfProtection = createCsrfProtection();
 
 // CSRF token endpoint
-app.get('/api/csrf', (req, res) => {
-  const token = issueCsrfCookie(res);
-  res.json({ token });
+app.get('/api/csrf', (_req, res) => {
+  try {
+    const token = issueCsrfCookie(res);
+    res.json({ token });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to issue CSRF token';
+    res.status(500).json({ error: { code: 'csrf_config', message } });
+  }
 });
 
 // API
@@ -224,19 +234,30 @@ app.use(
 );
 
 const PORT = config.port || DEFAULT_PORT;
-const server = app.listen(PORT, () => {
-  console.log(`Middleware Composer listening on http://localhost:${PORT}`);
-});
+const invokedFromCli = process.argv.some((arg) => arg.endsWith('server.ts') || arg.endsWith('server.js'));
+const shouldListen = process.env.START_SERVER !== 'false' && invokedFromCli;
+let server: ReturnType<typeof app.listen> | undefined;
 
-function gracefulShutdown(signal: string) {
-  console.log(`Received ${signal}, shutting down...`);
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
+if (shouldListen) {
+  server = app.listen(PORT, () => {
+    console.log(`Middleware Composer listening on http://localhost:${PORT}`);
   });
-  // Force exit if close hangs
-  setTimeout(() => process.exit(1), 10_000).unref();
+
+  function gracefulShutdown(signal: string) {
+    if (!server) {
+      process.exit(0);
+    }
+    console.log(`Received ${signal}, shutting down...`);
+    server.close(() => {
+      console.log('Server closed');
+      process.exit(0);
+    });
+    // Force exit if close hangs
+    setTimeout(() => process.exit(1), 10_000).unref();
+  }
+
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 }
 
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+export { app, createCsrfProtection, issueCsrfCookie };

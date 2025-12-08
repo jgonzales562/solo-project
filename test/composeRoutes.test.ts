@@ -3,13 +3,34 @@ import assert from 'node:assert/strict';
 import net from 'node:net';
 import request from 'supertest';
 import express from 'express';
+import cookieParser from 'cookie-parser';
 import composeRoutes from '../src/routes/composeRoutes.js';
+import { createCsrfProtection, issueCsrfCookie } from '../src/server.js';
 
 // Build a lightweight app using the router
 function createApp() {
   const app = express();
   app.use(express.json({ limit: '1mb' }));
   app.use('/api', composeRoutes);
+  return app;
+}
+
+function createAppWithCsrf() {
+  const app = express();
+  app.use(express.json({ limit: '1mb' }));
+  app.use(cookieParser());
+  app.get('/api/csrf', (_req, res) => {
+    try {
+      const token = issueCsrfCookie(res);
+      res.json({ token });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to issue CSRF token';
+      res.status(500).json({ error: { message } });
+    }
+  });
+  app.post('/api/protected', createCsrfProtection(), (_req, res) => {
+    res.json({ ok: true });
+  });
   return app;
 }
 
@@ -58,6 +79,24 @@ test('GET unknown /api route returns JSON 404', { skip: !canBind }, async () => 
   assert.equal(res.status, 404);
   assert.equal(res.body.error.code, 'not_found');
   assert.match(res.body.error.message, /route not found/i);
+});
+
+test('GET /api/csrf issues token usable for protected POST', { skip: !canBind }, async () => {
+  const app = createAppWithCsrf();
+  const agent = request.agent(app);
+
+  const csrfRes = await agent.get('/api/csrf');
+  assert.equal(csrfRes.status, 200);
+  const token = csrfRes.body?.token;
+  assert.equal(typeof token, 'string');
+
+  const postRes = await agent
+    .post('/api/protected')
+    .set('x-csrf-token', token as string)
+    .send({ hello: 'world' });
+
+  assert.equal(postRes.status, 200);
+  assert.equal(postRes.body.ok, true);
 });
 
 test('POST /api/compose/export rejects invalid chain', { skip: !canBind }, async () => {

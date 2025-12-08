@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Response } from 'express';
 import { listMiddlewares, buildChain } from '../middlewares/registry.js';
 import { runChain } from '../composer/composeTimed.js';
+import { config } from '../config.js';
 
 type ChainItem = { key: string; options?: Record<string, unknown> };
 
@@ -32,7 +33,7 @@ const MAX_HEADER_VALUE_LENGTH = 1000;
 const MAX_BODY_KEYS = 100;
 const MAX_BODY_STRING_LENGTH = 10000;
 const MAX_BODY_SERIALIZED_LENGTH = getSerializedBodyLimit();
-const REQUEST_BODY_LIMIT_BYTES = getRequestBodyLimitBytes();
+const REQUEST_BODY_LIMIT_BYTES = config.requestBodyLimitBytes;
 const MAX_PER_STEP_TIMEOUT_MS = 10000;
 const MAX_BODY_DEPTH = 10;
 const TELEMETRY_MIDDLEWARE_LIMIT = 200;
@@ -43,14 +44,6 @@ function getSerializedBodyLimit(): number {
   const parsed = Number(raw);
   if (Number.isFinite(parsed) && parsed > 0) return parsed;
   return 50000;
-}
-
-function getRequestBodyLimitBytes(): number {
-  const raw = process.env.REQUEST_BODY_LIMIT_BYTES;
-  const parsed = Number(raw);
-  if (Number.isFinite(parsed) && parsed > 0) return parsed;
-  // default to 1MB to match express.json limit
-  return 1_000_000;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
