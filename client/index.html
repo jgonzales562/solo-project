@@ -7,30 +7,32 @@
       name="description"
       content="Interactive tool for composing, testing, and visualizing Express.js middleware chains"
     />
+    <meta name="theme-color" content="#111827" />
     <link rel="icon" href="/favicon.ico" />
     <link rel="manifest" href="/manifest.json" />
     <title>Middleware Composer</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div class="container">
+    <a class="skip-link" href="#mw-list">Skip to middleware list</a>
+    <div class="container" role="main" aria-label="Middleware Composer">
       <h1>Middleware Composer</h1>
 
       <div class="row">
-        <div class="card card-narrow">
-          <h3>1) Pick & order</h3>
+        <div class="card card-narrow" aria-labelledby="pick-order-title">
+          <h3 id="pick-order-title">1) Pick & order</h3>
           <div id="mw-list" class="col" role="list"></div>
         </div>
 
-        <div class="card card-flex">
-          <h3>2) Options for selected</h3>
+        <div class="card card-flex" aria-labelledby="options-title">
+          <h3 id="options-title">2) Options for selected</h3>
           <div id="selected" class="col" role="list"></div>
         </div>
       </div>
 
       <div class="row row-spaced">
-        <div class="card card-narrow">
-          <h3>3) Mock Request</h3>
+        <div class="card card-narrow" aria-labelledby="request-title">
+          <h3 id="request-title">3) Mock Request</h3>
           <label for="method">Method <input id="method" value="GET" /></label>
           <label for="path">Path <input id="path" value="/test" /></label>
           <label for="per-step-timeout"
@@ -60,8 +62,8 @@
           </div>
         </div>
 
-        <div class="card card-flex">
-          <h3>4) Timeline & Result</h3>
+        <div class="card card-flex" aria-labelledby="timeline-title">
+          <h3 id="timeline-title">4) Timeline & Result</h3>
           <div id="inline-error" class="inline-error" role="alert" aria-live="polite"></div>
           <div id="timeline" class="timeline"></div>
           <pre id="result"></pre>

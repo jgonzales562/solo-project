@@ -60,7 +60,44 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    files: ['test/**/*.ts'],
+    languageOptions: {
+      parserOptions: {
+        projectService: false,
+        project: ['./tsconfig.test.json'],
+        tsconfigRootDir: __dirname,
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-floating-promises': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+    },
+  },
+  {
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      parserOptions: {
+        projectService: false,
+        sourceType: 'module',
+        ecmaVersion: 'latest',
+      },
+      globals: {
+        console: 'readonly',
+        process: 'readonly',
+      },
+    },
+    env: { node: true },
+    ...tseslint.configs.disableTypeChecked,
+  },
   prettier,
+  {
+    linterOptions: {
+      reportUnusedDisableDirectives: true,
+    },
+  },
   {
     ignores: ['dist/', 'node_modules/', '*.config.js'],
   }

@@ -78,6 +78,14 @@ const CONFIG = {
 } as const;
 
 type ResponseCallback = () => void;
+type ResponseSnapshot = {
+  locals: Locals;
+  statusCode: number;
+  headers: Record<string, string>;
+  cookies: Res['cookies'];
+  responded: boolean;
+  responseBody?: unknown;
+};
 
 function createResponse(onRespond?: ResponseCallback): Res {
   return {
@@ -148,6 +156,8 @@ export async function runChain({
     const startedAt = Date.now();
     let status: TimelineItem['status'] = 'ok';
     let errorMsg: string | undefined;
+    const beforeStep = snapshotResponse(res);
+    let timedOut = false;
 
     await new Promise<void>((resolve) => {
       let resolved = false;
@@ -167,6 +177,7 @@ export async function runChain({
 
       const timer = setTimeout(() => {
         if (!resolved) {
+          timedOut = true;
           status = 'timeout';
           safeResolve();
         }
@@ -203,6 +214,10 @@ export async function runChain({
     // Determine final status - if response was sent without error/timeout, it's a short-circuit
     const finalStatus: TimelineItem['status'] =
       res.responded && status === 'ok' ? 'short-circuit' : status;
+
+    if (timedOut) {
+      restoreResponse(res, beforeStep);
+    }
 
     timeline.push({
       key: step.key,
@@ -243,4 +258,27 @@ function shallowPreview(obj: Record<string, unknown>): Record<string, unknown> {
         : v;
   }
   return out;
+}
+
+function snapshotResponse(res: Res): ResponseSnapshot {
+  return {
+    locals: structuredClone(res.locals),
+    statusCode: res.statusCode,
+    headers: { ...res.headers },
+    cookies: res.cookies.map((c) => ({
+      ...c,
+      options: c.options ? { ...c.options } : undefined,
+    })),
+    responded: res.responded,
+    responseBody: res.responseBody,
+  };
+}
+
+function restoreResponse(res: Res, snapshot: ResponseSnapshot) {
+  res.locals = snapshot.locals;
+  res.statusCode = snapshot.statusCode;
+  res.headers = snapshot.headers;
+  res.cookies = snapshot.cookies;
+  res.responded = snapshot.responded;
+  res.responseBody = snapshot.responseBody;
 }

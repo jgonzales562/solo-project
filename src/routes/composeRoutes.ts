@@ -32,19 +32,12 @@ const MAX_STRING_LENGTH = 10000;
 const MAX_HEADER_VALUE_LENGTH = 1000;
 const MAX_BODY_KEYS = 100;
 const MAX_BODY_STRING_LENGTH = 10000;
-const MAX_BODY_SERIALIZED_LENGTH = getSerializedBodyLimit();
+const MAX_BODY_SERIALIZED_LENGTH = config.maxBodySerializedLength;
 const REQUEST_BODY_LIMIT_BYTES = config.requestBodyLimitBytes;
 const MAX_PER_STEP_TIMEOUT_MS = 10000;
 const MAX_BODY_DEPTH = 10;
 const TELEMETRY_MIDDLEWARE_LIMIT = 200;
 const TELEMETRY_RESET_MS = 1000 * 60 * 60 * 24; // 24h
-
-function getSerializedBodyLimit(): number {
-  const raw = process.env.MAX_BODY_SERIALIZED_LENGTH;
-  const parsed = Number(raw);
-  if (Number.isFinite(parsed) && parsed > 0) return parsed;
-  return 50000;
-}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -252,6 +245,7 @@ router.get('/middlewares', (_req, res) => {
 
 router.post('/compose/run', async (req, res) => {
   const { chain = [], payload, perStepTimeoutMs } = req.body || {};
+  res.setHeader('Cache-Control', 'no-store');
 
   const chainValidation = validateChain(chain);
   if (!chainValidation.valid) {
@@ -285,6 +279,7 @@ router.post('/compose/run', async (req, res) => {
 
 router.post('/compose/export', (req, res) => {
   const { chain = [] } = req.body || {};
+  res.setHeader('Cache-Control', 'no-store');
   const validation = validateChain(chain);
 
   if (!validation.valid) {
@@ -297,6 +292,8 @@ router.post('/compose/export', (req, res) => {
 });
 
 router.get('/telemetry', (_req, res) => {
+  maybeResetTelemetry();
+  res.setHeader('Cache-Control', 'no-store');
   const avgDuration =
     telemetry.totalRuns === 0 ? 0 : telemetry.totalDurationMs / telemetry.totalRuns;
   res.json({

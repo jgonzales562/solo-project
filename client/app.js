@@ -1,12 +1,17 @@
 // Constants
 const DEBOUNCE_DELAY = 300;
 const MIN_BAR_WIDTH = 2;
+const TOAST_DURATION_MS = 5000;
+const RETRY_BASE_DELAY_MS = 300;
 
 // State
 const state = {
   all: [], // catalog
   selected: [], // [{ key, options }]
 };
+
+// Simple in-memory cache to avoid duplicate fetches during parallel requests
+const pendingPromises = new Map();
 
 // Cache DOM elements
 const dom = {
@@ -74,6 +79,15 @@ function clearElement(el) {
   el.replaceChildren();
 }
 
+function memoizeOnce(key, factory) {
+  if (pendingPromises.has(key)) return pendingPromises.get(key);
+  const p = Promise.resolve()
+    .then(factory)
+    .finally(() => pendingPromises.delete(key));
+  pendingPromises.set(key, p);
+  return p;
+}
+
 function parseJSON(value, fieldName) {
   try {
     return JSON.parse(value || '{}');
@@ -101,14 +115,15 @@ function showError(message) {
   toast.appendChild(closeBtn);
   document.body.appendChild(toast);
 
-  // Auto-dismiss after 5 seconds
-  setTimeout(() => toast.remove(), 5000);
+  // Auto-dismiss after configured duration
+  setTimeout(() => toast.remove(), TOAST_DURATION_MS);
 }
 
 // Reusable API call wrapper to reduce duplication
 async function apiCall(url, options = {}, retryConfig = {}) {
-  const { retries = 2, retryDelayMs = 300 } = retryConfig;
+  const { retries = 2, retryDelayMs = RETRY_BASE_DELAY_MS } = retryConfig;
   let lastError;
+  let retriedCsrf = false;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
@@ -125,22 +140,35 @@ async function apiCall(url, options = {}, retryConfig = {}) {
       }
       const res = await fetch(url, options);
       if (!res.ok) {
+        const contentType = res.headers.get('content-type') || '';
+        const isJson = contentType.includes('application/json');
+        const error = isJson ? await res.json().catch(() => null) : null;
+
+        if (
+          res.status === 403 &&
+          isJson &&
+          error?.error?.code === 'csrf_invalid' &&
+          !retriedCsrf
+        ) {
+          retriedCsrf = true;
+          csrfToken = null;
+          await ensureCsrfToken();
+          await sleep(retryDelayMs * (attempt + 1));
+          continue;
+        }
+
         // Retry server errors; surface others immediately
         if (res.status >= 500 && attempt < retries) {
           await sleep(retryDelayMs * (attempt + 1));
           continue;
         }
-        const contentType = res.headers.get('content-type') || '';
-        if (contentType.includes('application/json')) {
-          const error = await res.json();
-          const msg =
-            error?.error?.message ||
-            error?.err ||
-            error?.message ||
-            `Request failed: ${res.status}`;
-          throw new Error(msg);
-        }
-        throw new Error(`Request failed: ${res.status}`);
+
+        const msg =
+          error?.error?.message ||
+          error?.err ||
+          error?.message ||
+          `Request failed: ${res.status}`;
+        throw new Error(msg);
       }
       return res;
     } catch (err) {
@@ -169,7 +197,8 @@ async function ensureCsrfToken() {
   const res = await fetch('/api/csrf', { method: 'GET', credentials: 'same-origin' });
   if (!res.ok) throw new Error('Failed to fetch CSRF token');
   const data = await res.json();
-  csrfToken = data.token;
+  csrfToken = data?.token || null;
+  if (!csrfToken) throw new Error('Failed to fetch CSRF token');
   return csrfToken;
 }
 
@@ -204,7 +233,8 @@ async function fetchCatalog() {
   }
 
   try {
-    const res = await apiCall('/api/middlewares');
+    // memoize to avoid duplicate network calls if triggered twice quickly
+    const res = await memoizeOnce('catalog', () => apiCall('/api/middlewares'));
     const data = await res.json();
     state.all = data.middlewares;
     renderCatalog();

@@ -16,7 +16,15 @@ const run = (cmd, args) => {
     cwd: ROOT,
     env: process.env,
   });
-  return result.status ?? 1;
+  if (result.error) {
+    console.error(`Failed to run ${cmd}:`, result.error.message);
+    return 1;
+  }
+  if (result.status === null) {
+    console.error(`Process for ${cmd} terminated by signal`);
+    return 1;
+  }
+  return result.status;
 };
 
 let status = 0;

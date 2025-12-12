@@ -6,6 +6,8 @@
     "esModuleInterop": true,
     "strict": true,
     "skipLibCheck": true,
+    "noEmitOnError": true,
+    "forceConsistentCasingInFileNames": true,
     "rootDir": "src",
     "outDir": "dist",
     "types": ["node", "express"]

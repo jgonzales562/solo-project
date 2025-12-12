@@ -1,12 +1,15 @@
 {
   "name": "solo-project",
   "version": "1.0.0",
+  "private": true,
   "description": "Interactive middleware composer for Express.js - visualize, test, and export middleware chains",
   "main": "dist/server.js",
   "scripts": {
     "test": "npm run build && npm run lint && npm run test:integration",
     "test:integration": "node scripts/run-integration.mjs",
-    "ci": "npm run lint -- --max-warnings=0 && npm run build && npm run test:integration",
+    "lint:ci": "npm run lint -- --max-warnings=0",
+    "format:check": "prettier --check \"src/**/*.ts\" \"client/**/*.{js,html,css}\"",
+    "ci": "npm run format:check && npm run lint:ci && npm run build && npm run test:integration",
     "build": "tsc",
     "clean": "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true});fs.rmSync('.tmp-test',{recursive:true,force:true});\"",
     "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\"",

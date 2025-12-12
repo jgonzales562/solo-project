@@ -1,4 +1,4 @@
-import type { Req, RequestHandlerLike } from '../composer/composeTimed.js';
+import type { Req, Res, Next, RequestHandlerLike } from '../composer/composeTimed.js';
 
 export type MiddlewareMeta = {
   key: string;
@@ -135,7 +135,7 @@ export const registry: readonly MiddlewareMeta[] = Object.freeze([
     defaults: { header: 'x-user-id' },
     factory:
       ({ header = 'x-user-id' } = {}) =>
-      (req, res, next) => {
+      (req: Req, res: Res, next: Next) => {
         // If your real controller expects res.locals.user._id, provide it from a header when running the mock
         const idFromHeader = getHeader(req, header);
         if (idFromHeader && !res.locals.user)

@@ -5,6 +5,8 @@ type MiddlewareFactory = MiddlewareMeta['factory'];
 
 export type MiddlewareFactoryMap = Record<MiddlewareKey, MiddlewareFactory>;
 
-export const middlewareExports: MiddlewareFactoryMap = Object.fromEntries(
-  registry.map(({ key, factory }) => [key, factory])
-) as MiddlewareFactoryMap;
+const middlewareEntries = registry.map(({ key, factory }) => [key, factory] as const);
+
+export const middlewareExports = Object.fromEntries(
+  middlewareEntries
+) satisfies MiddlewareFactoryMap;

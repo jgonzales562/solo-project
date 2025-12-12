@@ -23,7 +23,7 @@ function parseTrustProxy(value: string | undefined): boolean | string | number {
 }
 
 const NODE_ENV = process.env.NODE_ENV || 'development';
-const REQUIRED_ENV_IN_PROD = ['PORT', 'CSRF_SECRET'] as const;
+const REQUIRED_ENV_IN_PROD = ['CSRF_SECRET'] as const;
 const DEV_CSRF_SECRET_FALLBACK = 'dev-only-csrf-secret-change-me';
 
 if (NODE_ENV === 'production') {
@@ -33,7 +33,17 @@ if (NODE_ENV === 'production') {
   }
 }
 
-const csrfSecret = process.env.CSRF_SECRET ?? DEV_CSRF_SECRET_FALLBACK;
+let csrfSecret = process.env.CSRF_SECRET;
+if (!csrfSecret) {
+  if (NODE_ENV === 'development') {
+    console.warn(
+      'Using development CSRF secret fallback; set CSRF_SECRET for any real deployment.'
+    );
+    csrfSecret = DEV_CSRF_SECRET_FALLBACK;
+  } else {
+    throw new Error('CSRF_SECRET is required when NODE_ENV is not development');
+  }
+}
 
 export const config = {
   nodeEnv: NODE_ENV,
@@ -45,4 +55,5 @@ export const config = {
     parseBool(process.env.CSRF_SECURE_COOKIE as Bool, NODE_ENV === 'production'),
   csrfSecret,
   trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
+  maxBodySerializedLength: parseNumber(process.env.MAX_BODY_SERIALIZED_LENGTH, 50_000),
 };

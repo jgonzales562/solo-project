@@ -1,6 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import net from 'node:net';
 import request from 'supertest';
 import express from 'express';
 import cookieParser from 'cookie-parser';
@@ -34,19 +33,7 @@ function createAppWithCsrf() {
   return app;
 }
 
-async function canBindPort(): Promise<boolean> {
-  return new Promise((resolve) => {
-    const srv = net.createServer();
-    srv.once('error', () => resolve(false));
-    srv.listen(0, '127.0.0.1', () => {
-      srv.close(() => resolve(true));
-    });
-  });
-}
-
-const canBind = await canBindPort();
-
-test('POST /api/compose/run rejects non-array chain', { skip: !canBind }, async () => {
+test('POST /api/compose/run rejects non-array chain', async () => {
   const app = createApp();
   const res = await request(app).post('/api/compose/run').send({ chain: {} });
   assert.equal(res.status, 400);
@@ -54,7 +41,15 @@ test('POST /api/compose/run rejects non-array chain', { skip: !canBind }, async 
   assert.match(res.body.error.message, /chain must be an array/i);
 });
 
-test('POST /api/compose/run executes and returns timeline/final', { skip: !canBind }, async () => {
+test('POST /api/compose/run rejects overly long chain', async () => {
+  const app = createApp();
+  const longChain = Array.from({ length: 51 }, () => ({ key: 'logger' }));
+  const res = await request(app).post('/api/compose/run').send({ chain: longChain });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error.code, 'invalid_chain');
+});
+
+test('POST /api/compose/run executes and returns timeline/final', async () => {
   const app = createApp();
   const res = await request(app)
     .post('/api/compose/run')
@@ -73,7 +68,7 @@ test('POST /api/compose/run executes and returns timeline/final', { skip: !canBi
   assert.deepEqual(res.body.final.body, { ok: true });
 });
 
-test('GET unknown /api route returns JSON 404', { skip: !canBind }, async () => {
+test('GET unknown /api route returns JSON 404', async () => {
   const app = createApp();
   const res = await request(app).get('/api/does-not-exist');
   assert.equal(res.status, 404);
@@ -81,7 +76,7 @@ test('GET unknown /api route returns JSON 404', { skip: !canBind }, async () => 
   assert.match(res.body.error.message, /route not found/i);
 });
 
-test('GET /api/csrf issues token usable for protected POST', { skip: !canBind }, async () => {
+test('GET /api/csrf issues token usable for protected POST', async () => {
   const app = createAppWithCsrf();
   const agent = request.agent(app);
 
@@ -99,7 +94,7 @@ test('GET /api/csrf issues token usable for protected POST', { skip: !canBind },
   assert.equal(postRes.body.ok, true);
 });
 
-test('POST /api/compose/export rejects invalid chain', { skip: !canBind }, async () => {
+test('POST /api/compose/export rejects invalid chain', async () => {
   const app = createApp();
   const res = await request(app)
     .post('/api/compose/export')
@@ -107,4 +102,83 @@ test('POST /api/compose/export rejects invalid chain', { skip: !canBind }, async
   assert.equal(res.status, 400);
   assert.equal(res.body.error.code, 'invalid_chain');
   assert.match(res.body.error.message, /chain\[0\]\.key/i);
+});
+
+test('POST /api/compose/run rejects invalid perStepTimeout', async () => {
+  const app = createApp();
+  const res = await request(app)
+    .post('/api/compose/run')
+    .send({
+      chain: [{ key: 'logger' }],
+      perStepTimeoutMs: -5,
+    });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error.code, 'invalid_timeout');
+});
+
+test('POST /api/compose/run rejects perStepTimeout above max', async () => {
+  const app = createApp();
+  const res = await request(app)
+    .post('/api/compose/run')
+    .send({
+      chain: [{ key: 'logger' }],
+      perStepTimeoutMs: 20000,
+    });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error.code, 'invalid_timeout');
+});
+
+test('GET /api/telemetry reflects runs', async () => {
+  const app = createApp();
+  const agent = request(app);
+
+  const before = await agent.get('/api/telemetry');
+  assert.equal(before.status, 200);
+  const prevRuns = Number(before.body.totalRuns || 0);
+
+  await agent
+    .post('/api/compose/run')
+    .send({
+      chain: [
+        { key: 'logger' },
+        { key: 'respond', options: { status: 204, body: { ok: true } } },
+      ],
+    });
+
+  const after = await agent.get('/api/telemetry');
+  assert.equal(after.status, 200);
+  assert.equal(after.body.totalRuns, prevRuns + 1);
+  assert.ok(after.body.middlewares.respond?.count >= 1);
+});
+
+test('POST /api/compose/run rejects non-object options', async () => {
+  const app = createApp();
+  const res = await request(app)
+    .post('/api/compose/run')
+    .send({
+      chain: [{ key: 'logger', options: [] }],
+    });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error.code, 'invalid_chain');
+});
+
+test('POST /api/compose/export returns code for valid chain', async () => {
+  const app = createApp();
+  const res = await request(app)
+    .post('/api/compose/export')
+    .send({ chain: [{ key: 'respond', options: { status: 204 } }] });
+  assert.equal(res.status, 200);
+  assert.match(res.text, /middlewareExports\.respond/);
+});
+
+test('POST /api/compose/run rejects invalid payload headers', async () => {
+  const app = createApp();
+  const res = await request(app)
+    .post('/api/compose/run')
+    .send({
+      chain: [{ key: 'logger' }],
+      payload: { headers: 'not-an-object' },
+    });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error.code, 'invalid_payload');
 });

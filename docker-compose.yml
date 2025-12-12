@@ -7,15 +7,10 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      CSRF_SECRET: "change-me"
+      CSRF_SECRET: ${CSRF_SECRET:?CSRF_SECRET is required}
       TRUST_PROXY: "loopback"
       REQUEST_BODY_LIMIT_BYTES: 1000000
       MAX_BODY_SERIALIZED_LENGTH: 50000
       RATE_LIMIT_ENABLED: "true"
       LOG_REQUESTS: "false"
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/ready"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
     restart: unless-stopped

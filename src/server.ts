@@ -14,6 +14,7 @@ const DEFAULT_PORT = 3000;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
+app.disable('x-powered-by');
 // Honor X-Forwarded-* headers when behind proxies/load balancers (needed for rate limiting & CSRF)
 if (config.trustProxy) {
   app.set('trust proxy', config.trustProxy);
@@ -76,7 +77,7 @@ app.use(
       directives: {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'"],
         imgSrc: ["'self'", 'data:'],
         connectSrc: ["'self'"],
         fontSrc: ["'self'", 'data:'],
@@ -152,13 +153,7 @@ function createCsrfProtection() {
     const cookieToken = req.cookies?.[CSRF_COOKIE_NAME] as string | undefined;
     let verifiedToken = verifySignature(cookieToken);
     if (!verifiedToken) {
-      verifiedToken = generateCsrfToken();
-      res.cookie(CSRF_COOKIE_NAME, signToken(verifiedToken), {
-        httpOnly: true,
-        sameSite: 'lax',
-        secure: CSRF_SECURE_COOKIE,
-        maxAge: 1000 * 60 * 60 * 2, // 2 hours
-      });
+      verifiedToken = issueCsrfCookie(res);
       if (isSafe) return next();
     }
 
