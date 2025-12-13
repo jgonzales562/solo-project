@@ -210,6 +210,33 @@ function validateSelection() {
   return true;
 }
 
+function validateOptionJson() {
+  const nodes = dom.selected?.querySelectorAll('textarea.opts');
+  if (!nodes || nodes.length === 0) return true;
+  let hasError = false;
+  nodes.forEach((textarea, idx) => {
+    try {
+      const parsed = JSON.parse(textarea.value || '{}');
+      state.selected[idx].options = parsed;
+      textarea.classList.remove('json-invalid');
+      textarea.classList.add('json-valid');
+    } catch {
+      hasError = true;
+      textarea.classList.remove('json-valid');
+      textarea.classList.add('json-invalid');
+    }
+  });
+
+  if (hasError) {
+    const message = 'Fix invalid middleware options JSON before continuing.';
+    showInlineError(message);
+    showError(message);
+    return false;
+  }
+
+  return true;
+}
+
 // Cached metadata map - invalidated when catalog changes
 let metaMapCache = null;
 let metaMapCacheKey = null;
@@ -402,6 +429,7 @@ async function run() {
     }
 
     clearInlineError();
+    if (!validateOptionJson()) return;
 
     const headers = parseJSON(dom.headers.value, 'Headers');
     const query = parseJSON(dom.query.value, 'Query');
@@ -439,6 +467,8 @@ async function exportCode() {
   let started = false;
   try {
     if (!validateSelection()) return;
+    clearInlineError();
+    if (!validateOptionJson()) return;
     beginBusy();
     started = true;
 

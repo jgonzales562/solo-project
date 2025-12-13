@@ -7,6 +7,7 @@ import { config } from '../config.js';
 type ChainItem = { key: string; options?: Record<string, unknown> };
 
 const router = Router();
+const VALID_MIDDLEWARE_KEYS = new Set(listMiddlewares().map((m) => m.key));
 type TelemetryEntry = {
   count: number;
   errors: number;
@@ -59,6 +60,9 @@ function validateChain(chain: unknown): { valid: boolean; error?: string } {
     }
     if (typeof item.key !== 'string' || item.key.length === 0) {
       return { valid: false, error: `chain[${i}].key must be a non-empty string` };
+    }
+    if (!VALID_MIDDLEWARE_KEYS.has(item.key)) {
+      return { valid: false, error: `chain[${i}].key is not a known middleware` };
     }
     if (item.options !== undefined && !isPlainObject(item.options)) {
       return { valid: false, error: `chain[${i}].options must be an object if provided` };

@@ -121,6 +121,87 @@ function createResponse(onRespond?: ResponseCallback): Res {
   };
 }
 
+function createScopedResponse(base: Res, token: symbol, isActive: (token: symbol) => boolean): Res {
+  const allow = () => isActive(token);
+  const guardedLocals = new Proxy(base.locals, {
+    get(target, prop) {
+      return Reflect.get(target, prop);
+    },
+    set(target, prop, value) {
+      if (!allow()) return true;
+      return Reflect.set(target, prop, value);
+    },
+    deleteProperty(target, prop) {
+      if (!allow()) return false;
+      return Reflect.deleteProperty(target, prop);
+    },
+  });
+
+  const scoped: Res = {
+    get locals() {
+      return guardedLocals;
+    },
+    set locals(value: Locals) {
+      if (allow()) base.locals = value;
+    },
+    get statusCode() {
+      return base.statusCode;
+    },
+    set statusCode(code: number) {
+      if (allow()) base.statusCode = code;
+    },
+    get headers() {
+      return base.headers;
+    },
+    set headers(value: Record<string, string>) {
+      if (allow()) base.headers = value;
+    },
+    get cookies() {
+      return base.cookies;
+    },
+    set cookies(value: Res['cookies']) {
+      if (allow()) base.cookies = value;
+    },
+    get responded() {
+      return base.responded;
+    },
+    set responded(value: boolean) {
+      if (allow()) base.responded = value;
+    },
+    get responseBody() {
+      return base.responseBody;
+    },
+    set responseBody(value: unknown) {
+      if (allow()) base.responseBody = value;
+    },
+    status(code: number) {
+      if (!allow()) return this;
+      base.status(code);
+      return this;
+    },
+    json(data: unknown) {
+      if (!allow()) return this;
+      base.json(data);
+      return this;
+    },
+    send(data: unknown) {
+      if (!allow()) return this;
+      base.send(data);
+      return this;
+    },
+    setHeader(name: string, value: string) {
+      if (!allow()) return;
+      base.setHeader(name, value);
+    },
+    cookie(name: string, value: string, options?: Record<string, unknown>) {
+      if (!allow()) return;
+      base.cookie(name, value, options);
+    },
+  };
+
+  return scoped;
+}
+
 function getErrorMessage(err: unknown): string {
   if (typeof err === 'string') return err;
   if (err instanceof Error) return err.message;
@@ -132,6 +213,7 @@ export async function runChain({
   payload,
   perStepTimeoutMs = CONFIG.DEFAULT_STEP_TIMEOUT_MS,
 }: RunOptions): Promise<RunResult> {
+  let activeStepToken: symbol | null = null;
   const req: Req = {
     method: payload?.method ?? CONFIG.DEFAULT_METHOD,
     path: payload?.path ?? CONFIG.DEFAULT_PATH,
@@ -150,13 +232,20 @@ export async function runChain({
   // Mutable callback reference that gets updated each step
   // This replaces inefficient polling (setInterval) with event-driven resolution
   let onRespondCallback: ResponseCallback | undefined;
-  const res = createResponse(() => onRespondCallback?.());
+  const resState = createResponse(() => onRespondCallback?.());
 
   for (const step of chain) {
+    const stepToken = Symbol('step');
+    const scopedRes = createScopedResponse(
+      resState,
+      stepToken,
+      (token) => activeStepToken === token
+    );
+    activeStepToken = stepToken;
     const startedAt = Date.now();
     let status: TimelineItem['status'] = 'ok';
     let errorMsg: string | undefined;
-    const beforeStep = snapshotResponse(res);
+    const beforeStep = snapshotResponse(resState);
     let timedOut = false;
 
     await new Promise<void>((resolve) => {
@@ -195,7 +284,7 @@ export async function runChain({
 
       // Execute the middleware
       try {
-        const maybe = step.handler(req, res, next);
+        const maybe = step.handler(req, scopedRes, next);
         if (maybe instanceof Promise) {
           maybe.catch((e: unknown) => {
             status = 'error';
@@ -209,14 +298,15 @@ export async function runChain({
         safeResolve();
       }
     });
+    activeStepToken = null;
     const durationMs = Math.max(0, Date.now() - startedAt);
 
     // Determine final status - if response was sent without error/timeout, it's a short-circuit
     const finalStatus: TimelineItem['status'] =
-      res.responded && status === 'ok' ? 'short-circuit' : status;
+      resState.responded && status === 'ok' ? 'short-circuit' : status;
 
     if (timedOut) {
-      restoreResponse(res, beforeStep);
+      restoreResponse(resState, beforeStep);
     }
 
     timeline.push({
@@ -226,7 +316,7 @@ export async function runChain({
       durationMs,
       status: finalStatus,
       error: errorMsg,
-      localsPreview: shallowPreview(res.locals),
+      localsPreview: shallowPreview(resState.locals),
     });
 
     // Stop execution on error, timeout, or short-circuit
@@ -238,12 +328,12 @@ export async function runChain({
   return {
     timeline,
     final: {
-      statusCode: res.statusCode,
-      headers: res.headers,
-      cookies: res.cookies,
-      locals: res.locals,
-      responded: res.responded,
-      body: res.responseBody,
+      statusCode: resState.statusCode,
+      headers: resState.headers,
+      cookies: resState.cookies,
+      locals: resState.locals,
+      responded: resState.responded,
+      body: resState.responseBody,
     },
   };
 }

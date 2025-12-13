@@ -117,13 +117,20 @@ function signToken(token: string) {
   return `${token}.${crypto.createHmac('sha256', CSRF_SECRET).update(token).digest('hex')}`;
 }
 
+function timingSafeEquals(a: string, b: string) {
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  if (aBuf.length !== bBuf.length) return false;
+  return crypto.timingSafeEqual(aBuf, bBuf);
+}
+
 function verifySignature(value: string | undefined) {
   if (!value) return undefined;
   const parts = value.split('.');
   if (parts.length !== 2) return undefined;
   const [token, sig] = parts;
   const expected = crypto.createHmac('sha256', CSRF_SECRET).update(token).digest('hex');
-  return sig === expected ? token : undefined;
+  return timingSafeEquals(sig, expected) ? token : undefined;
 }
 
 function issueCsrfCookie(res: express.Response) {

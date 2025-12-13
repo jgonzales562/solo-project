@@ -5,6 +5,7 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import composeRoutes from '../src/routes/composeRoutes.js';
 import { createCsrfProtection, issueCsrfCookie } from '../src/server.js';
+import { runChain } from '../src/composer/composeTimed.js';
 
 // Build a lightweight app using the router
 function createApp() {
@@ -104,6 +105,18 @@ test('POST /api/compose/export rejects invalid chain', async () => {
   assert.match(res.body.error.message, /chain\[0\]\.key/i);
 });
 
+test('POST /api/compose/run rejects unknown middleware key', async () => {
+  const app = createApp();
+  const res = await request(app)
+    .post('/api/compose/run')
+    .send({
+      chain: [{ key: 'unknown-mw' }],
+    });
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error.code, 'invalid_chain');
+  assert.match(res.body.error.message, /known middleware/i);
+});
+
 test('POST /api/compose/run rejects invalid perStepTimeout', async () => {
   const app = createApp();
   const res = await request(app)
@@ -181,4 +194,37 @@ test('POST /api/compose/run rejects invalid payload headers', async () => {
     });
   assert.equal(res.status, 400);
   assert.equal(res.body.error.code, 'invalid_payload');
+});
+
+test('runChain ignores late mutations from prior steps', async () => {
+  const result = await runChain({
+    chain: [
+      {
+        key: 'late',
+        name: 'Late',
+        handler: (_req, res, next) => {
+          next();
+          setTimeout(() => {
+            res.status(500);
+            res.setHeader('x-late', '1');
+            res.locals.after = true;
+          }, 20);
+        },
+      },
+      {
+        key: 'next',
+        name: 'Next',
+        handler: (_req, res, next) => {
+          res.setHeader('x-good', 'yes');
+          next();
+        },
+      },
+    ],
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(result.final.statusCode, 200);
+  assert.equal(result.final.headers['x-good'], 'yes');
+  assert.equal(result.final.headers['x-late'], undefined);
+  assert.equal(Object.prototype.hasOwnProperty.call(result.final.locals, 'after'), false);
 });
