@@ -1,7 +1,7 @@
 # Contributing
 
 ## Prerequisites
-- Node.js 18+ (repo `.nvmrc` targets 20.x). If you use `nvm`, run `nvm use`.
+- Node.js 20.17.0+ (repo `.nvmrc` targets 20.17.0). If you use `nvm`, run `nvm use`.
 - npm 9+ recommended.
 - `.nvmrc` is present; `nvm use` will align to the project version.
 

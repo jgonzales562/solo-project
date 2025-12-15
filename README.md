@@ -38,7 +38,7 @@ npm start
 
 ### Docker Compose (example)
 
-The included `docker-compose.yml` runs the app in production mode. Override secrets in your environment:
+The included `docker-compose.yml` runs the app in production mode. Override secrets in your environment (for local HTTP, also set `CSRF_SECURE_COOKIE=false`):
 
 ```bash
 CSRF_SECRET=replace-me docker-compose up --build

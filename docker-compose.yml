@@ -12,6 +12,6 @@ services:
       REQUEST_BODY_LIMIT_BYTES: 1000000
       MAX_BODY_SERIALIZED_LENGTH: 50000
       RATE_LIMIT_ENABLED: "true"
-      CSRF_SECURE_COOKIE: "false"
+      CSRF_SECURE_COOKIE: "${CSRF_SECURE_COOKIE:-true}"
       LOG_REQUESTS: "false"
     restart: unless-stopped
