@@ -10,11 +10,17 @@ const cleanup = () => {
   rmSync(TEMP_DIR, { recursive: true, force: true });
 };
 
+const TEST_ENV = {
+  ...process.env,
+  NODE_ENV: process.env.NODE_ENV ?? 'test',
+  CSRF_SECRET: process.env.CSRF_SECRET ?? 'test-only-csrf-secret',
+};
+
 const run = (cmd, args) => {
   const result = spawnSync(cmd, args, {
     stdio: 'inherit',
     cwd: ROOT,
-    env: process.env,
+    env: TEST_ENV,
   });
   if (result.error) {
     console.error(`Failed to run ${cmd}:`, result.error.message);
@@ -31,9 +37,19 @@ let status = 0;
 
 try {
   cleanup();
-  status = run('tsc', ['-p', 'tsconfig.test.json', '--outDir', TEMP_DIR, '--noEmit', 'false']);
+  status = run('tsc', [
+    '-p',
+    'tsconfig.test.json',
+    '--outDir',
+    TEMP_DIR,
+    '--noEmit',
+    'false',
+  ]);
   if (status === 0) {
-    status = run('node', ['--test', path.join(TEMP_DIR, 'test', 'composeRoutes.test.js')]);
+    status = run('node', [
+      '--test',
+      path.join(TEMP_DIR, 'test', 'composeRoutes.test.js'),
+    ]);
   }
 } finally {
   cleanup();

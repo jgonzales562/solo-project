@@ -1,28 +1,35 @@
-type Bool = 'true' | 'false' | undefined;
-
-function parseBool(value: Bool, fallback: boolean): boolean {
-  if (value === 'true') return true;
-  if (value === 'false') return false;
+function parseBool(value: string | undefined, fallback: boolean): boolean {
+  if (value === undefined) return fallback;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'true' || normalized === '1') return true;
+  if (normalized === 'false' || normalized === '0') return false;
   return fallback;
 }
 
 function parseNumber(value: string | undefined, fallback: number): number {
-  const num = Number(value);
+  if (value === undefined) return fallback;
+  const normalized = value.trim();
+  if (!normalized) return fallback;
+  const cleaned = normalized.replace(/_/g, '').replace(/,/g, '');
+  const num = Number(cleaned);
   if (Number.isFinite(num) && num >= 0) return num;
   return fallback;
 }
 
 function parseTrustProxy(value: string | undefined): boolean | string | number {
   if (!value) return false;
-  const lower = value.toLowerCase();
+  const normalized = value.trim();
+  if (!normalized) return false;
+  const lower = normalized.toLowerCase();
   if (lower === 'false' || lower === '0') return false;
   if (lower === 'true') return true;
-  const num = Number(value);
+  const cleaned = normalized.replace(/_/g, '').replace(/,/g, '');
+  const num = Number(cleaned);
   if (Number.isFinite(num) && num >= 0) return num;
-  return value;
+  return normalized;
 }
 
-const NODE_ENV = process.env.NODE_ENV || 'development';
+const NODE_ENV = (process.env.NODE_ENV || 'development').trim().toLowerCase();
 const REQUIRED_ENV_IN_PROD = ['CSRF_SECRET'] as const;
 const DEV_CSRF_SECRET_FALLBACK = 'dev-only-csrf-secret-change-me';
 
@@ -54,10 +61,10 @@ export const config = {
     process.env.REQUEST_BODY_LIMIT_BYTES,
     1_000_000
   ),
-  rateLimitEnabled: parseBool(process.env.RATE_LIMIT_ENABLED as Bool, true),
-  logRequests: parseBool(process.env.LOG_REQUESTS as Bool, false),
+  rateLimitEnabled: parseBool(process.env.RATE_LIMIT_ENABLED, true),
+  logRequests: parseBool(process.env.LOG_REQUESTS, false),
   csrfSecureCookie: parseBool(
-    process.env.CSRF_SECURE_COOKIE as Bool,
+    process.env.CSRF_SECURE_COOKIE,
     NODE_ENV === 'production'
   ),
   csrfSecret,

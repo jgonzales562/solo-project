@@ -78,6 +78,7 @@ export default tseslint.config(
   },
   {
     files: ['scripts/**/*.mjs'],
+    ...tseslint.configs.disableTypeChecked,
     languageOptions: {
       parserOptions: {
         projectService: false,
@@ -87,10 +88,11 @@ export default tseslint.config(
       globals: {
         console: 'readonly',
         process: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        URL: 'readonly',
       },
     },
-    env: { node: true },
-    ...tseslint.configs.disableTypeChecked,
   },
   prettier,
   {

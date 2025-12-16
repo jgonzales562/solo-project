@@ -9,8 +9,6 @@ import crypto from 'crypto';
 import composeRoutes from './routes/composeRoutes.js';
 import { config } from './config.js';
 
-const DEFAULT_PORT = 3000;
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
@@ -253,7 +251,7 @@ app.use(
   }
 );
 
-const PORT = config.port || DEFAULT_PORT;
+const PORT = config.port;
 const invokedFromCli = process.argv.some(
   (arg) => arg.endsWith('server.ts') || arg.endsWith('server.js')
 );

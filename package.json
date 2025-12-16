@@ -8,18 +8,18 @@
     "test": "npm run build && npm run lint && npm run test:integration",
     "test:integration": "node scripts/run-integration.mjs",
     "lint:ci": "npm run lint -- --max-warnings=0",
-    "format:check": "prettier --check \"src/**/*.ts\" \"client/**/*.{js,html,css}\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\" \"scripts/**/*.mjs\" \"client/**/*.{js,html,css}\"",
     "ci": "npm run format:check && npm run lint:ci && npm run build && npm run test:integration",
     "build": "tsc",
     "clean": "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true});fs.rmSync('.tmp-test',{recursive:true,force:true});\"",
     "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "tsx watch src/server.ts",
-    "dev:client": "sleep 2 && browser-sync start --proxy localhost:3000 --files \"client/**/*\" --no-open --no-notify",
+    "dev:client": "node scripts/dev-client.mjs",
     "prestart": "npm run build",
     "start": "node dist/server.js",
-    "lint": "eslint src/ client/",
-    "lint:fix": "eslint src/ client/ --fix",
-    "format": "prettier --write \"src/**/*.ts\" \"client/**/*.{js,html,css}\""
+    "lint": "eslint src/ client/ scripts/ test/",
+    "lint:fix": "eslint src/ client/ scripts/ test/ --fix",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"scripts/**/*.mjs\" \"client/**/*.{js,html,css}\""
   },
   "engines": {
     "node": ">=20.17.0"
@@ -46,26 +46,26 @@
   "dependencies": {
     "compression": "^1.8.1",
     "cookie-parser": "^1.4.7",
-    "express": "^5.1.0",
+    "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",
     "helmet": "^8.1.0"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.1",
+    "@eslint/js": "^9.39.2",
     "@types/compression": "^1.8.1",
     "@types/cookie-parser": "^1.4.10",
     "@types/eslint__js": "^8.42.3",
-    "@types/express": "^5.0.3",
-    "@types/node": "^20.17.6",
+    "@types/express": "^5.0.6",
+    "@types/node": "^20.19.27",
     "@types/supertest": "^6.0.3",
     "browser-sync": "^3.0.4",
     "concurrently": "^9.2.1",
-    "eslint": "^9.39.1",
+    "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
-    "prettier": "^3.6.2",
+    "prettier": "^3.7.4",
     "supertest": "^7.1.4",
-    "tsx": "^4.20.5",
-    "typescript": "^5.9.2",
-    "typescript-eslint": "^8.47.0"
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.50.0"
   }
 }

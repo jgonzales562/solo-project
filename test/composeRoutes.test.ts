@@ -24,7 +24,8 @@ function createAppWithCsrf() {
       const token = issueCsrfCookie(res);
       res.json({ token });
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to issue CSRF token';
+      const message =
+        err instanceof Error ? err.message : 'Failed to issue CSRF token';
       res.status(500).json({ error: { message } });
     }
   });
@@ -45,7 +46,9 @@ test('POST /api/compose/run rejects non-array chain', async () => {
 test('POST /api/compose/run rejects overly long chain', async () => {
   const app = createApp();
   const longChain = Array.from({ length: 51 }, () => ({ key: 'logger' }));
-  const res = await request(app).post('/api/compose/run').send({ chain: longChain });
+  const res = await request(app)
+    .post('/api/compose/run')
+    .send({ chain: longChain });
   assert.equal(res.status, 400);
   assert.equal(res.body.error.code, 'invalid_chain');
 });
@@ -149,14 +152,12 @@ test('GET /api/telemetry reflects runs', async () => {
   assert.equal(before.status, 200);
   const prevRuns = Number(before.body.totalRuns || 0);
 
-  await agent
-    .post('/api/compose/run')
-    .send({
-      chain: [
-        { key: 'logger' },
-        { key: 'respond', options: { status: 204, body: { ok: true } } },
-      ],
-    });
+  await agent.post('/api/compose/run').send({
+    chain: [
+      { key: 'logger' },
+      { key: 'respond', options: { status: 204, body: { ok: true } } },
+    ],
+  });
 
   const after = await agent.get('/api/telemetry');
   assert.equal(after.status, 200);
@@ -226,5 +227,8 @@ test('runChain ignores late mutations from prior steps', async () => {
   assert.equal(result.final.statusCode, 200);
   assert.equal(result.final.headers['x-good'], 'yes');
   assert.equal(result.final.headers['x-late'], undefined);
-  assert.equal(Object.prototype.hasOwnProperty.call(result.final.locals, 'after'), false);
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(result.final.locals, 'after'),
+    false
+  );
 });
