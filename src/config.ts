@@ -29,7 +29,9 @@ const DEV_CSRF_SECRET_FALLBACK = 'dev-only-csrf-secret-change-me';
 if (NODE_ENV === 'production') {
   const missing = REQUIRED_ENV_IN_PROD.filter((key) => !process.env[key]);
   if (missing.length > 0) {
-    throw new Error(`Missing required env vars in production: ${missing.join(', ')}`);
+    throw new Error(
+      `Missing required env vars in production: ${missing.join(', ')}`
+    );
   }
 }
 
@@ -48,12 +50,20 @@ if (!csrfSecret) {
 export const config = {
   nodeEnv: NODE_ENV,
   port: parseNumber(process.env.PORT, 3000),
-  requestBodyLimitBytes: parseNumber(process.env.REQUEST_BODY_LIMIT_BYTES, 1_000_000),
+  requestBodyLimitBytes: parseNumber(
+    process.env.REQUEST_BODY_LIMIT_BYTES,
+    1_000_000
+  ),
   rateLimitEnabled: parseBool(process.env.RATE_LIMIT_ENABLED as Bool, true),
   logRequests: parseBool(process.env.LOG_REQUESTS as Bool, false),
-  csrfSecureCookie:
-    parseBool(process.env.CSRF_SECURE_COOKIE as Bool, NODE_ENV === 'production'),
+  csrfSecureCookie: parseBool(
+    process.env.CSRF_SECURE_COOKIE as Bool,
+    NODE_ENV === 'production'
+  ),
   csrfSecret,
   trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
-  maxBodySerializedLength: parseNumber(process.env.MAX_BODY_SERIALIZED_LENGTH, 50_000),
+  maxBodySerializedLength: parseNumber(
+    process.env.MAX_BODY_SERIALIZED_LENGTH,
+    50_000
+  ),
 };

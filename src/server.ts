@@ -129,7 +129,10 @@ function verifySignature(value: string | undefined) {
   const parts = value.split('.');
   if (parts.length !== 2) return undefined;
   const [token, sig] = parts;
-  const expected = crypto.createHmac('sha256', CSRF_SECRET).update(token).digest('hex');
+  const expected = crypto
+    .createHmac('sha256', CSRF_SECRET)
+    .update(token)
+    .digest('hex');
   return timingSafeEquals(sig, expected) ? token : undefined;
 }
 
@@ -148,14 +151,24 @@ function issueCsrfCookie(res: express.Response) {
 }
 
 function createCsrfProtection() {
-  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  return (
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction
+  ) => {
     if (!CSRF_SECRET) {
       const msg = 'CSRF_SECRET is required in production';
       console.error(msg);
-      return res.status(500).json({ error: { code: 'csrf_config', message: msg } });
+      return res
+        .status(500)
+        .json({ error: { code: 'csrf_config', message: msg } });
     }
     const method = req.method.toUpperCase();
-    const isSafe = method === 'GET' || method === 'HEAD' || method === 'OPTIONS' || method === 'TRACE';
+    const isSafe =
+      method === 'GET' ||
+      method === 'HEAD' ||
+      method === 'OPTIONS' ||
+      method === 'TRACE';
 
     const cookieToken = req.cookies?.[CSRF_COOKIE_NAME] as string | undefined;
     let verifiedToken = verifySignature(cookieToken);
@@ -168,12 +181,14 @@ function createCsrfProtection() {
 
     const headerToken =
       req.get(CSRF_HEADER_NAME) ||
-      (typeof req.body === 'object' && req.body !== null ? (req.body as { _csrf?: string })._csrf : undefined);
+      (typeof req.body === 'object' && req.body !== null
+        ? (req.body as { _csrf?: string })._csrf
+        : undefined);
 
     if (!headerToken || headerToken !== verifiedToken) {
-      return res
-        .status(403)
-        .json({ error: { code: 'csrf_invalid', message: 'Invalid CSRF token' } });
+      return res.status(403).json({
+        error: { code: 'csrf_invalid', message: 'Invalid CSRF token' },
+      });
     }
 
     return next();
@@ -188,7 +203,8 @@ app.get('/api/csrf', (_req, res) => {
     const token = issueCsrfCookie(res);
     res.json({ token });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to issue CSRF token';
+    const message =
+      err instanceof Error ? err.message : 'Failed to issue CSRF token';
     res.status(500).json({ error: { code: 'csrf_config', message } });
   }
 });
@@ -227,7 +243,9 @@ app.use(
   ) => {
     console.error('Error:', err);
     if ((err as { code?: string }).code === 'EBADCSRFTOKEN') {
-      return res.status(403).json({ error: { code: 'csrf_invalid', message: 'Invalid CSRF token' } });
+      return res.status(403).json({
+        error: { code: 'csrf_invalid', message: 'Invalid CSRF token' },
+      });
     }
     const status = err.status || 500;
     const message = err.message || 'Internal Server Error';
@@ -236,7 +254,9 @@ app.use(
 );
 
 const PORT = config.port || DEFAULT_PORT;
-const invokedFromCli = process.argv.some((arg) => arg.endsWith('server.ts') || arg.endsWith('server.js'));
+const invokedFromCli = process.argv.some(
+  (arg) => arg.endsWith('server.ts') || arg.endsWith('server.js')
+);
 const shouldListen = process.env.START_SERVER !== 'false' && invokedFromCli;
 let server: ReturnType<typeof app.listen> | undefined;
 

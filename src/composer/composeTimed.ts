@@ -32,11 +32,19 @@ export type Res = {
   json: (data: unknown) => Res;
   send: (data: unknown) => Res;
   setHeader: (name: string, value: string) => void;
-  cookie: (name: string, value: string, options?: Record<string, unknown>) => void;
+  cookie: (
+    name: string,
+    value: string,
+    options?: Record<string, unknown>
+  ) => void;
 };
 
 export type Next = (err?: unknown) => void;
-export type RequestHandlerLike = (req: Req, res: Res, next: Next) => void | Promise<void>;
+export type RequestHandlerLike = (
+  req: Req,
+  res: Res,
+  next: Next
+) => void | Promise<void>;
 
 export type TimelineItem = {
   key: string;
@@ -121,7 +129,11 @@ function createResponse(onRespond?: ResponseCallback): Res {
   };
 }
 
-function createScopedResponse(base: Res, token: symbol, isActive: (token: symbol) => boolean): Res {
+function createScopedResponse(
+  base: Res,
+  token: symbol,
+  isActive: (token: symbol) => boolean
+): Res {
   const allow = () => isActive(token);
   const guardedLocals = new Proxy(base.locals, {
     get(target, prop) {

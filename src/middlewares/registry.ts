@@ -1,4 +1,9 @@
-import type { Req, Res, Next, RequestHandlerLike } from '../composer/composeTimed.js';
+import type {
+  Req,
+  Res,
+  Next,
+  RequestHandlerLike,
+} from '../composer/composeTimed.js';
 
 export type MiddlewareMeta = {
   key: string;
@@ -90,7 +95,10 @@ export const registry: readonly MiddlewareMeta[] = Object.freeze([
       'Reads x-user header and puts a fake user object on res.locals.',
     defaults: { header: 'x-user', defaultRole: 'viewer' },
     factory:
-      ({ header = 'x-user', defaultRole = 'viewer' }: { header?: unknown; defaultRole?: string } = {}) =>
+      ({
+        header = 'x-user',
+        defaultRole = 'viewer',
+      }: { header?: unknown; defaultRole?: string } = {}) =>
       (req, res, next) => {
         const id = getHeader(req, header);
         if (id) {

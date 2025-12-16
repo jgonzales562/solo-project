@@ -135,7 +135,9 @@ async function apiCall(url, options = {}, retryConfig = {}) {
             'x-csrf-token': csrfToken,
           };
         } catch (tokenErr) {
-          throw tokenErr instanceof Error ? tokenErr : new Error(String(tokenErr));
+          throw tokenErr instanceof Error
+            ? tokenErr
+            : new Error(String(tokenErr));
         }
       }
       const res = await fetch(url, options);
@@ -194,7 +196,10 @@ function clearInlineError() {
 
 async function ensureCsrfToken() {
   if (csrfToken) return csrfToken;
-  const res = await fetch('/api/csrf', { method: 'GET', credentials: 'same-origin' });
+  const res = await fetch('/api/csrf', {
+    method: 'GET',
+    credentials: 'same-origin',
+  });
   if (!res.ok) throw new Error('Failed to fetch CSRF token');
   const data = await res.json();
   csrfToken = data?.token || null;
@@ -451,7 +456,11 @@ async function run() {
     const res = await apiCall('/api/compose/run', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ chain: state.selected, payload, perStepTimeoutMs }),
+      body: JSON.stringify({
+        chain: state.selected,
+        payload,
+        perStepTimeoutMs,
+      }),
     });
     const data = await res.json();
     renderTimeline(data);
